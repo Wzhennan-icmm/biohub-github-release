@@ -10,13 +10,14 @@ cargo build --release
 ./target/release/biohub --help
 ```
 
-Compatibility script examples:
+CLI examples:
 
 ```bash
 git clone https://github.com/Wzhennan-icmm/biohub-github-release.git
 cd biohub-github-release
-python3 run_change_HJJN_geneName.py -i map.txt -o out.txt
-python3 run_filter_NCBI_gff_to_get_gene.py --input in.gff3 --output out.gff3
+cd biohub-rs
+cargo build --release
+./target/release/biohub --help
 ```
 
 Notes:
@@ -44,10 +45,6 @@ Notes:
   - `wgcna-weight`
 - `psmc`
   - `merge`
-
-## Compatibility entry files
-
-`run_*.py` wrappers and `gff_longest.py` now call the Rust launcher `biohub-rs/run-biohub.sh` and keep old command names usable.
 
 ## Legacy content retained
 
