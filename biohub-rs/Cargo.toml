@@ -1,0 +1,8 @@
+[package]
+name = "biohub-rs"
+version = "0.2.1"
+edition = "2021"
+
+[[bin]]
+name = "biohub"
+path = "src/main.rs"
