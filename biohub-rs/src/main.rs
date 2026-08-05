@@ -6157,4 +6157,63 @@ chr1\t6\t.\tC\tT\t.\t.\t.
             &side_path,
         ]);
     }
+
+    #[test]
+    fn test_run_annotation_vcf_boundary_positions() {
+        let reference = ">chr1\nACGTACGTACGTACGTACGTAC\n";
+        let gff = "\
+chr1\tRefSeq\tgene\t1\t10\t.\t+\t.\tID=gene1;Name=Gene1
+chr1\tRefSeq\tmRNA\t2\t9\t.\t+\t.\tID=tx1;Parent=gene1
+chr1\tRefSeq\texon\t6\t7\t.\t+\t.\tID=ex1;Parent=tx1
+chr1\tRefSeq\tCDS\t2\t4\t.\t+\t.\tID=cds1;Parent=tx1
+";
+        let vcf = "\
+##fileformat=VCFv4.2
+#CHROM POS ID REF ALT QUAL FILTER INFO
+chr1\t1\t.\tA\tT\t.\t.\t.
+chr1\t2\t.\tC\tG\t.\t.\t.
+chr1\t4\t.\tA\tG\t.\t.\t.
+chr1\t5\t.\tT\tA\t.\t.\t.
+chr1\t6\t.\tC\tT\t.\t.\t.
+chr1\t10\t.\tG\tA\t.\t.\t.
+";
+
+        let ref_path = make_tmp_file("annotation_bound_ref", ".fa", reference);
+        let gff_path = make_tmp_file("annotation_bound", ".gff3", gff);
+        let vcf_path = make_tmp_file("annotation_bound", ".vcf", vcf);
+        let out_path = make_tmp_file("annotation_bound", ".tsv", "");
+        fs::remove_file(&out_path).unwrap();
+
+        let ret = run_annotation_vcf(
+            &ref_path.to_string_lossy(),
+            &gff_path.to_string_lossy(),
+            &vcf_path.to_string_lossy(),
+            &out_path.to_string_lossy(),
+            "tsv",
+        )
+        .unwrap();
+        assert_eq!(ret, 0);
+
+        let out_text = read_to_string(&out_path).unwrap();
+        let mut iter = out_text.lines().skip(1);
+        let mut rows = Vec::new();
+        for line in &mut iter {
+            rows.push(line);
+        }
+        let row1 = rows[0];
+        let row2 = rows[1];
+        let row3 = rows[2];
+        let row4 = rows[3];
+        let row5 = rows[4];
+        let row6 = rows[5];
+
+        assert!(row1.contains("\t1\tA\tT") && row1.contains("\tGene-body\t"));
+        assert!(row2.contains("\t2\tC\tG") && row2.contains("\tCDS\t"));
+        assert!(row3.contains("\t4\tA\tG") && row3.contains("\tCDS\t"));
+        assert!(row4.contains("\t5\tT\tA") && row4.contains("\tIntron\t"));
+        assert!(row5.contains("\t6\tC\tT") && row5.contains("\tExon\t"));
+        assert!(row6.contains("\t10\tG\tA") && row6.contains("\tGene-body\t"));
+
+        cleanup(&[&ref_path, &gff_path, &vcf_path, &out_path]);
+    }
 }
