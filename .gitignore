@@ -1,4 +1,5 @@
 /target/
+biohub-rs/target/
 __pycache__/
 *.pyc
 *.pyo

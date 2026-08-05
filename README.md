@@ -20,6 +20,13 @@ cargo build --release
 ./target/release/biohub --help
 ```
 
+Script migration command:
+
+```bash
+./target/release/biohub scripts catalog           # list all script ids and status
+./target/release/biohub scripts run <script-id> ... # run specific script
+```
+
 Notes:
 
 - `gff/filter-ncbi` 默认输出 `TA-filtered.gff3`（未传 `-o` 时）。
@@ -43,6 +50,9 @@ Notes:
   - `coverage-ratio`
   - `hic-matrix-reindex`
   - `wgcna-weight`
+- `scripts`
+  - `catalog`
+  - `run <script-id> ...`
 - `psmc`
   - `merge`
 

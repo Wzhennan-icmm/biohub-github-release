@@ -1,0 +1,54 @@
+#id	source	description	status	note
+change-scaffolds-name	run_change_scaffolds_name.py	Replace first field IDs from mapping file	implemented	No external dependencies
+change-scaffolds-name-fasta	run_change_scaffolds_name_fasta.py	Rename FASTA headers with mapping table	implemented	No external dependencies
+change-seqname-for-fasta	run_change_seqName_for_fasta.py	Rename headers in all *.aln files under directory	implemented	No external dependencies
+convert-3line2one	run_convert_3line2one_for_SV_depth.py	Convert 3-line depth rows into one-line windows	implemented	No external dependencies
+filter-seq-by-length	run_filter_seq_by_length.py	Keep FASTA records above length threshold	implemented	Fixed threshold bug in original
+filter-gff-by-id	run_filter_gff_by_ID.py	Filter GFF rows by ID list	implemented	Stable parsing
+filter-gtf-ctg	run_filter_gtf_ctg.py	Filter GTF/GFF rows by contig list	implemented	Stable parsing
+merge-two-txt	run_merge_two_txt.py	Deduplicate rows, keep row with largest third column	implemented	No external dependencies
+compare-two-blast	run_compare_two_blastFile.py	Reciprocal BLAST pair filter	implemented	No external dependencies
+get-best-idy	run_get_best_idy_for_blast.py	Best identity per query from BLAST6	implemented	No external dependencies
+get-best-hit-based-on-idy	run_get_best_hit_based_on_idy.py	Reciprocal best-hits by score+identity	implemented	Writes `.idy.txt`
+get-best-hit-genes	run_get_best_hit_genes.py	Reciprocal best/second best e-values	implemented	Replicated logic
+compare-as-and-noAS	run_compare_AS_and_noAS_results.py	Filter AS table by noAS list	implemented	Stable parsing
+compare-busco-results	run_compare_busco_results.py	Compare BUSCO gene sets by species pairs	implemented	Writes `justHave.txt` and `justLost.txt`
+merge-fpkm-file	run_Merge_fpkm_file.py	Merge per-gene expression values from directory	implemented	No external dependencies
+save-go	run_Save_yuanyaowu_go.py	Extract GO lines from annotation table	implemented	Legacy typos fixed
+merge-gos	run_merge_Gos_nr_swissprot_Trembl_Blast2gos.py	Merge GO annotations across Swissprot/nr/Trembl	implemented	EC GO terms excluded
+merge-blastp-best-jcvi	run_merge_blastpBest_for_jcvi.py	Build JCVI style all-vs-all besthit matrix	implemented	Pads missing values with '.'
+orthogenes	run_orthogenes.py	Deduplicate comma lists in grouped lines	implemented	No external dependencies
+get-the-longest-seq	run_get_the_longest_seq.py	Pick longest transcript per gene family	implemented	Output `gene\ttranscript`
+get-longest-transcript	run_get_longest_transcript.py	Alias of shortest gene parser with dot-suffix transcript grouping	implemented	Added from Python/zip reference script
+genome-gc	run_genome_gc.py	Compute GC fraction from FASTA	implemented	No external dependencies
+extract-longest-pep	run_extract_longest_pep_from_ensembl_download.py	Pick longest peptide per gene	implemented	No external dependencies
+convert-lastz2-jcvi	00.run_convert_lastz2JCVI.py_1	Split lastz blocks into pseudo-gene bed-like tables	implemented	Rust rewrite with stable parsing and output files
+extract-pasa-results	run_Extract_PASA_results.py	Extract proteins and longest mRNA from PASA output	implemented	Rust rewrite for robust parse and outputs
+convert-gemoma-gff3	run_convert_GeMoMa_gff_to_gff3.py	Convert GeMoMa GFF output to GFF3 semantics	implemented	Rust rewrite of record remapping
+convert-gene-annotation-contigs2chr-PASA	run_convert_gene_annotation_contigs2Chr_PASA.py	Map contig annotation to chromosome coordinates	implemented	Rust rewrite for coordinate conversion
+convert-gene-annotation-scaffold2chr-nextgenomics	run_convert_gene_annotation_scaffold2chr_NextGenomicsVersion.py	Map scaffold annotations for NextGenomics	implemented	Rust rewrite for split scaffold recovery
+filter-gemoma-as	run_filter_GeMoMa_AS.py	Filter GeMoMa output by CDS length	implemented	Rust rewrite; CDS-length based filtering
+filter-gemoma-as2	run_filter_GeMoMa_AS_2.py	Pick longest CDS isoform in GeMoMa GFF	implemented	Rust rewrite with longest isoform selection
+get-best-hit-by-score	run_get_best_hit_by_score.py	Best score reciprocal	implemented	Rust rewrite for reciprocal best-score filter
+get-best-hit-by-score-one-file	run_get_best_hit_by_score_one_file.py	Best score output with identity	implemented	Rust rewrite for single-file best score
+get-best-hit-from-blast	run_get_best_hit_from_blast.py	Cross-species reciprocal best-hit filtering	implemented	Rust rewrite for reciprocal set cleanup
+get-best-hit-for-scan	run_get_best_hit_from_blast.py	Compatibility alias	implemented	Alias to get-best-hit-from-blast
+extract-gene-family-info	run_extract_gene_family_info.py	Expression split by family/length	implemented	Rust rewrite with family full/partial outputs
+extract-gene-family-matrix	run_extract_gene_family_matrix.py	Expression matrix per family	implemented	Rust rewrite with coverage-based parent/child sums
+extract-gene-family-info-alt	run_extract_longest_pep_from_ensembl_download.py	Alt alias	implemented	See extract-longest-pep
+orthofiner-to-pal2nal	run_orthofiner_to_pal2nal.py	Build pal2nal-ready alignments	implemented	Rust rewrite uses external mafft/pal2nal pipeline
+convert-gene-annotation-contigs2chr	run_convert_gene_annotation_contigs2Chr_PASA.py	Alias	implemented	Alias to convert-gene-annotation-contigs2chr-PASA
+merge-two-end-bam	run_merge_two_end_bam.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join
+merge-two-end-bam1	run_merge_two_end_bam1.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join
+merge-two-end-bam-forMGI	run_merge_two_end_bam_forMGI.py	Pair-end BAM merge by read_name (MGI)	implemented	Rust rewrite using samtools stream join
+get-diff-sites-from-orthology	run_get_diff_sites_from_orthology.py	Compute degenerate differences from orthology alignments	implemented	Rust rewrite with shared four-fold codon scan
+get-four-degenerate-sites	run_get_four_degenerate_sites.py	Compute four-fold degenerate sites	implemented	Rust implementation for four-fold codon scanning
+plot-depth-pandepth	run_plot_depth_for_Pandepth.py	Plot depth/GC from pandepth table	implemented	Text output: filtered sites and per-chrom stats
+plot-depth-pandepth2	run_plot_depth_for_Pandepth2.py	Plot depth/GC with custom styling	implemented	Alias to plot-depth-pandepth parser/output
+plot-mosdepth-point	run_plot_depth_for_mosdepth_point.py	Plot mosdepth scatter depth data	implemented	Text output with per-locus filtering by chromosome length
+trim-ttaggg-fastq	run_trim_TTAGGG_for_fastq.py	Filter reads by TTAGGG motif at head/tail	implemented	Rust filter on forward/reverse TTAGGG rotations
+annotation-vcf	annotation_VCF_python3.py	Annotate VCF with CDS context	implemented	Rust annotation summary (TXT, not pickle)
+compare-orthology	run_get_diff_sites_from_orthology.py	Alias for orthology compare flow	implemented	Alias to get-diff-sites-from-orthology
+zhouxiaoxuan-mergexls	run_Zhouxiaoxuan_mergeXLS.py	Merge two XLS-like tables	implemented	Rust rewrite with key normalization
+check-duplication-gene-pairs	FilterTxt/run_check_duplication_for_gene_pairs.py	Filter duplicated gene pairs	implemented	Rust rewrite for symmetric dedupe
+convert-gene-annotation-legacy-alias	run_convert_gene_annotation_scaffold2chr_NextGenomicsVersion.py	Compatibility alias	implemented	Alias to convert-gene-annotation-scaffold2chr-nextgenomics
