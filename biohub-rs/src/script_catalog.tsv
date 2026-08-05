@@ -47,7 +47,7 @@ plot-depth-pandepth	run_plot_depth_for_Pandepth.py	Plot depth/GC from pandepth t
 plot-depth-pandepth2	run_plot_depth_for_Pandepth2.py	Plot depth/GC with custom styling	implemented	Alias parser with depth_gc_styled.svg output
 plot-mosdepth-point	run_plot_depth_for_mosdepth_point.py	Plot mosdepth scatter depth data	implemented	Outputs mosdepth_points.tsv and mosdepth_scatter.svg
 trim-ttaggg-fastq	run_trim_TTAGGG_for_fastq.py	Filter reads by TTAGGG motif at head/tail	implemented	Rust filter on forward/reverse TTAGGG rotations
-annotation-vcf	annotation_VCF_python3.py	Annotate VCF with CDS context	implemented	Rust annotation summary (TXT, not pickle)
+annotation-vcf	annotation_VCF_python3.py	Annotate VCF with CDS context	implemented	Outputs TSV by default; optionally writes companion .json when format=json/pickle
 compare-orthology	run_get_diff_sites_from_orthology.py	Alias for orthology compare flow	implemented	Alias to get-diff-sites-from-orthology
 zhouxiaoxuan-mergexls	run_Zhouxiaoxuan_mergeXLS.py	Merge two XLS-like tables	implemented	Rust rewrite with key normalization
 check-duplication-gene-pairs	FilterTxt/run_check_duplication_for_gene_pairs.py	Filter duplicated gene pairs	implemented	Rust rewrite for symmetric dedupe

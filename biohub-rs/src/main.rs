@@ -4096,26 +4096,86 @@ fn run_trim_ttaggg_fastq(input: &str, output: &str, motif: &str) -> Result<i32> 
     Ok(0)
 }
 
-fn run_annotation_vcf(reference: &str, gff: &str, vcf: &str, out_pickle: &str) -> Result<i32> {
-    let _ = open_reader(reference)?;
+#[derive(Clone)]
+struct IntervalFeature {
+    start: usize,
+    end: usize,
+    name: String,
+    transcript: String,
+}
 
-    let mut gene_map: HashMap<String, Vec<(usize, usize, String, char)>> = HashMap::new();
-    let mut exon_map: HashMap<String, Vec<(String, usize, usize, char, String)>> = HashMap::new();
+fn parse_gff_attrs(attrs: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for raw in attrs.split(';') {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        if let Some(eq_pos) = raw.find('=') {
+            let key = raw[..eq_pos].trim().to_string();
+            let mut value = raw[eq_pos + 1..].trim().to_string();
+            if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                value = value[1..value.len() - 1].to_string();
+            }
+            if !key.is_empty() {
+                out.insert(key, value);
+            }
+            continue;
+        }
 
-    let extract_attr = |attrs: &str, key: &str| -> Option<String> {
-        for part in attrs.split(';') {
-            let part = part.trim();
-            if !part.is_empty() {
-                let mut it = part.splitn(2, '=');
-                if let (Some(k), Some(v)) = (it.next(), it.next()) {
-                    if k == key {
-                        return Some(v.trim().to_string());
-                    }
-                }
+        if let Some(space_pos) = raw.find(' ') {
+            let key = raw[..space_pos].trim().to_string();
+            let value = raw[space_pos + 1..].trim().trim_matches('"').to_string();
+            if !key.is_empty() {
+                out.insert(key, value);
             }
         }
-        None
-    };
+    }
+    out
+}
+
+fn choose_alt_first(alt: &str) -> &str {
+    if let Some((first, _)) = alt.split_once(',') {
+        first
+    } else {
+        alt
+    }
+}
+
+fn var_kind(ref_allele: &str, alt_allele: &str) -> &'static str {
+    if ref_allele.len() == 1 && alt_allele.len() == 1 {
+        "SNV"
+    } else if ref_allele.len() < alt_allele.len() {
+        "INS"
+    } else if ref_allele.len() > alt_allele.len() {
+        "DEL"
+    } else {
+        "MNV"
+    }
+}
+
+fn run_annotation_vcf(reference: &str, gff: &str, vcf: &str, out_path: &str, format: &str) -> Result<i32> {
+    let mut fasta_reader = open_reader(reference)?;
+    let mut _line = String::new();
+    let mut reference_chromosomes: HashMap<String, usize> = HashMap::new();
+    while fasta_reader.read_line(&mut _line)? > 0 {
+        let raw = _line.trim_end_matches(['\n', '\r']).to_string();
+        _line.clear();
+        if raw.starts_with('>') {
+            let header = raw[1..]
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            reference_chromosomes.insert(header, 0);
+        }
+    }
+
+    let mut gene_intervals: HashMap<String, Vec<(usize, usize, String, char)>> = HashMap::new();
+    let mut transcript_name_to_gene: HashMap<String, String> = HashMap::new();
+    let mut transcript_intervals: HashMap<String, Vec<(String, usize, usize, String, char)>> = HashMap::new();
+    let mut cds_intervals: HashMap<String, Vec<IntervalFeature>> = HashMap::new();
+    let mut exon_intervals: HashMap<String, Vec<IntervalFeature>> = HashMap::new();
 
     let mut gff_reader = open_reader(gff)?;
     let mut line = String::new();
@@ -4129,82 +4189,274 @@ fn run_annotation_vcf(reference: &str, gff: &str, vcf: &str, out_pickle: &str) -
         if cols.len() < 9 {
             continue;
         }
-        let chr = cols[0].to_string();
+        let chr = cols[0];
         let feature = cols[2];
         let start = cols[3].parse::<usize>().unwrap_or(0);
         let end = cols[4].parse::<usize>().unwrap_or(0);
         let strand = cols[6].chars().next().unwrap_or('+');
-        let attrs = cols[8];
+        let attrs = parse_gff_attrs(cols[8]);
+        let gene_id = attrs
+            .get("gene_id")
+            .cloned()
+            .or_else(|| attrs.get("gene").cloned())
+            .or_else(|| attrs.get("Name").cloned())
+            .or_else(|| attrs.get("ID").cloned())
+            .unwrap_or_else(|| "NA".to_string());
+        let tx_id = attrs
+            .get("transcript_id")
+            .or_else(|| attrs.get("Parent"))
+            .or_else(|| attrs.get("ID"))
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "NA".to_string());
 
-        if feature == "mRNA" {
-            if let Some(gene_id) = extract_attr(attrs, "ID") {
-                gene_map.entry(chr.clone()).or_default().push((start, end, gene_id, strand));
-            }
-        } else if feature == "CDS" {
-            if let Some(parent) = extract_attr(attrs, "Parent") {
-                let transcript_id = parent;
-                exon_map
-                    .entry(chr.clone())
+        match feature {
+            "gene" => {
+                gene_intervals
+                    .entry(chr.to_string())
                     .or_default()
-                    .push((transcript_id.clone(), start, end, strand, transcript_id));
+                    .push((start, end, gene_id, strand));
             }
+            "mRNA" | "transcript" => {
+                transcript_name_to_gene.insert(tx_id.clone(), gene_id.clone());
+                transcript_intervals
+                    .entry(chr.to_string())
+                    .or_default()
+                    .push((tx_id.clone(), start, end, gene_id, strand));
+            }
+            "CDS" => {
+                let parent = attrs.get("Parent").cloned().unwrap_or_else(|| tx_id.clone());
+                let tx = transcript_name_to_gene.get(&parent).cloned().unwrap_or(parent.clone());
+                cds_intervals.entry(chr.to_string()).or_default().push(IntervalFeature {
+                    start,
+                    end,
+                    name: tx_id.clone(),
+                    transcript: tx,
+                });
+            }
+            "exon" => {
+                let parent = attrs.get("Parent").cloned().unwrap_or_else(|| tx_id.clone());
+                let tx = transcript_name_to_gene.get(&parent).cloned().unwrap_or(parent.clone());
+                exon_intervals.entry(chr.to_string()).or_default().push(IntervalFeature {
+                    start,
+                    end,
+                    name: tx_id.clone(),
+                    transcript: tx,
+                });
+            }
+            _ => {}
         }
     }
 
-    let overlaps = |ranges: &Vec<(usize, usize, String, char)>, pos: usize| -> Vec<String> {
+    for chr in exon_intervals.values_mut() {
+        chr.sort_by_key(|x| x.start);
+    }
+    for chr in cds_intervals.values_mut() {
+        chr.sort_by_key(|x| x.start);
+    }
+    for chr in transcript_intervals.values_mut() {
+        chr.sort_by_key(|x| x.1);
+    }
+    for chr in gene_intervals.values_mut() {
+        chr.sort_by_key(|x| x.0);
+    }
+
+    let format_lower = format.to_lowercase();
+    let emit_json = format_lower == "json" || format_lower == "pickle" || out_path.ends_with(".json") || out_path.ends_with(".pickle");
+    let out_tsv = !emit_json || format_lower == "txt" || format_lower == "tsv" || out_path.ends_with(".txt") || out_path.ends_with(".tsv");
+    let mut out = BufWriter::new(File::create(out_path)?);
+    let mut out_json = if emit_json {
+        Some(BufWriter::new(File::create(format!(
+            "{}.json",
+            out_path.trim_end_matches(".pickle").trim_end_matches(".json")
+        ))?))
+    } else {
+        None
+    };
+
+    let overlaps_gene = |intervals: &Vec<(usize, usize, String, char)>, pos: usize| -> Vec<String> {
         let mut out = Vec::new();
-        for (s, e, gid, _) in ranges {
+        for (s, e, id, _) in intervals {
             if pos >= *s && pos <= *e {
-                out.push(gid.clone());
+                if !out.iter().any(|v| v == id) {
+                    out.push(id.clone());
+                }
             }
         }
         out
     };
 
+    let overlaps_transcript = |intervals: &Vec<(String, usize, usize, String, char)>, pos: usize| -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for (tx, s, e, gene, _) in intervals {
+            if pos >= *s && pos <= *e {
+                out.push((tx.clone(), gene.clone()));
+            }
+        }
+        out
+    };
+
+    let overlaps_interval = |intervals: &Vec<IntervalFeature>, pos: usize| -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for it in intervals {
+            if pos >= it.start && pos <= it.end {
+                out.push((it.name.clone(), it.transcript.clone()));
+            }
+        }
+        out
+    };
+
+    if out_tsv {
+        writeln!(out, "chrom\tpos\tref\talt\ttype\tstatus\tgene_ids\ttranscript_ids\tfeature")?;
+    }
+    if let Some(json_out) = out_json.as_mut() {
+        writeln!(json_out, "[")?;
+    }
+
     let mut vcf_reader = open_reader(vcf)?;
-    let mut out = open_writer(Some(out_pickle))?;
-    writeln!(out, "#chr\tpos\tref\talt\ttype\tgene_or_exon")?;
     let mut rline = String::new();
+    let mut first_json = true;
     while vcf_reader.read_line(&mut rline)? > 0 {
         let raw = rline.trim_end_matches(['\n', '\r']).to_string();
         rline.clear();
         if raw.is_empty() || raw.starts_with('#') {
             continue;
         }
-        let cols: Vec<&str> = raw.split_whitespace().collect();
+        let cols: Vec<&str> = raw.split('\t').collect();
         if cols.len() < 5 {
             continue;
         }
-        let chr = cols[0].to_string();
+        let chr = cols[0].trim().to_string();
+        if !reference_chromosomes.is_empty() && !reference_chromosomes.contains_key(&chr) {
+            continue;
+        }
         let pos = cols[1].parse::<usize>().unwrap_or(0);
+        if pos == 0 {
+            continue;
+        }
         let reference = cols[3];
-        let alt = cols[4];
+        let alt_raw = cols[4];
+        let alt = choose_alt_first(alt_raw);
+        let vtype = var_kind(reference, alt);
 
-        let genes = gene_map.get(&chr).map_or_else(Vec::new, |v| overlaps(v, pos));
-        let exons = exon_map.get(&chr).map_or_else(Vec::new, |v| {
-            v.iter()
-                .filter(|(_, s, e, _, _)| pos >= *s && pos <= *e)
-                .map(|(_, _, _, _, t)| t.clone())
-                .collect()
-        });
+        let gene_hits = gene_intervals.get(&chr).map_or_else(Vec::new, |v| overlaps_gene(v, pos));
+        let transcript_hits = transcript_intervals
+            .get(&chr)
+            .map_or_else(Vec::new, |v| overlaps_transcript(v, pos));
+        let cds_hits = cds_intervals.get(&chr).map_or_else(Vec::new, |v| overlaps_interval(v, pos));
+        let exon_hits = exon_intervals.get(&chr).map_or_else(Vec::new, |v| overlaps_interval(v, pos));
 
-        let status = if !exons.is_empty() {
+        let status = if !cds_hits.is_empty() {
+            "CDS"
+        } else if !exon_hits.is_empty() {
             "Exon"
-        } else if !genes.is_empty() {
+        } else if !transcript_hits.is_empty() {
             "Intron"
+        } else if !gene_hits.is_empty() {
+            "Gene-body"
         } else {
             "Intergenic"
         };
-        let related = if !exons.is_empty() {
-            exons.join(";")
-        } else if !genes.is_empty() {
-            genes.join(";")
-        } else {
+
+        let mut tx_set = Vec::new();
+        for (name, _) in transcript_hits.iter() {
+            if !tx_set.contains(name) {
+                tx_set.push(name.clone());
+            }
+        }
+        for (name, _) in cds_hits.iter() {
+            if !tx_set.contains(name) {
+                tx_set.push(name.clone());
+            }
+        }
+        for (name, _) in exon_hits.iter() {
+            if !tx_set.contains(name) {
+                tx_set.push(name.clone());
+            }
+        }
+        let mut genes = gene_hits.clone();
+        if genes.is_empty() {
+            genes = transcript_hits
+                .iter()
+                .map(|(tx, _)| {
+                    transcript_name_to_gene
+                        .get(tx)
+                        .cloned()
+                        .unwrap_or_else(|| tx.clone())
+                })
+                .collect();
+            if genes.is_empty() {
+                genes = cds_hits
+                    .iter()
+                    .map(|(_, tx)| tx.clone())
+                    .collect();
+            }
+            if genes.is_empty() {
+                genes = exon_hits
+                    .iter()
+                    .map(|(_, tx)| tx.clone())
+                    .collect();
+            }
+        }
+
+        let gene_ids = if genes.is_empty() {
             "NA".to_string()
+        } else {
+            genes.join(";")
         };
-        writeln!(out, "{chr}\t{pos}\t{reference}\t{alt}\t{status}\t{related}")?;
+        let tx_ids = if tx_set.is_empty() {
+            "NA".to_string()
+        } else {
+            tx_set.join(";")
+        };
+
+        let feature = if !cds_hits.is_empty() {
+            "CDS"
+        } else if !exon_hits.is_empty() {
+            "exon"
+        } else if !transcript_hits.is_empty() {
+            "transcript"
+        } else if !gene_hits.is_empty() {
+            "gene"
+        } else {
+            "intergenic"
+        };
+
+        if out_tsv {
+            writeln!(
+                out,
+                "{chr}\t{pos}\t{reference}\t{alt}\t{vtype}\t{status}\t{gene_ids}\t{tx_ids}\t{feature}"
+            )?;
+        }
+
+        if let Some(json_out) = out_json.as_mut() {
+            if !first_json {
+                writeln!(json_out, ",")?;
+            }
+            first_json = false;
+            let gene_json = gene_ids.replace('\"', "\\\"");
+            let tx_json = tx_ids.replace('\"', "\\\"");
+            writeln!(
+                json_out,
+                "{{\"chrom\":\"{}\",\"pos\":{},\"ref\":\"{}\",\"alt\":\"{}\",\"type\":\"{}\",\"status\":\"{}\",\"gene_ids\":\"{}\",\"transcript_ids\":\"{}\",\"feature\":\"{}\"}}",
+                chr,
+                pos,
+                reference,
+                alt,
+                vtype,
+                status,
+                gene_json,
+                tx_json,
+                feature
+            )?;
+        }
+    }
+    if let Some(json_out) = out_json.as_mut() {
+        writeln!(json_out, "]")?;
     }
 
+    if !out_tsv {
+        out.flush()?;
+    }
     Ok(0)
 }
 
@@ -5159,11 +5411,13 @@ fn run_scripts(args: &[String]) -> i32 {
                     return 1;
                 }
             };
+            let format = get_opt(script_args, &["-f", "--format"]).unwrap_or_else(|| "tsv".to_string());
             run(run_annotation_vcf(
                 &reference,
                 &gff,
                 &vcf,
                 get_opt(script_args, &["-o", "--output", "--pickle"]).as_deref().unwrap_or("annotation_vcf.txt"),
+                &format,
             ))
         }
         _ => {
