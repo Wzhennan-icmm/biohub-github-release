@@ -6023,3 +6023,138 @@ fn main() {
 
     std::process::exit(code);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, read_to_string};
+
+    fn make_tmp_file(prefix: &str, suffix: &str, content: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(1))
+            .as_nanos();
+        path.push(format!(
+            "{prefix}_{}_{}{}",
+            std::process::id(),
+            nanos,
+            suffix
+        ));
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    fn cleanup(paths: &[&std::path::Path]) {
+        for path in paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn test_parse_gff_attrs() {
+        let attrs = parse_gff_attrs("ID=tx1;Name=tx1;Parent=gene1;\"quoted\"=\"abc\"");
+        assert_eq!(attrs.get("ID"), Some(&"tx1".to_string()));
+        assert_eq!(attrs.get("Name"), Some(&"tx1".to_string()));
+        assert_eq!(attrs.get("Parent"), Some(&"gene1".to_string()));
+    }
+
+    #[test]
+    fn test_choose_alt_first() {
+        assert_eq!(choose_alt_first("G"), "G");
+        assert_eq!(choose_alt_first("G,T"), "G");
+        assert_eq!(choose_alt_first("AT,GC"), "AT");
+    }
+
+    #[test]
+    fn test_run_annotation_vcf_tsv() {
+        let reference = ">chr1\nACGTACGTACGTACGTACGTAC\n";
+        let gff = "\
+chr1\tRefSeq\tgene\t1\t20\t.\t+\t.\tID=gene1;Name=Gene1
+chr1\tRefSeq\tmRNA\t1\t15\t.\t+\t.\tID=tx1;Parent=gene1
+chr1\tRefSeq\texon\t1\t5\t.\t+\t.\tID=ex1;Parent=tx1
+chr1\tRefSeq\tCDS\t1\t5\t.\t+\t.\tID=cds1;Parent=tx1
+chr1\tRefSeq\texon\t7\t8\t.\t+\t.\tID=ex2;Parent=tx1
+";
+        let vcf = "\
+##fileformat=VCFv4.2
+#CHROM POS ID REF ALT QUAL FILTER INFO
+chr1\t3\t.\tA\tG\t.\t.\t.
+chr1\t6\t.\tC\tT\t.\t.\t.
+chr1\t18\t.\tT\tA\t.\t.\t.
+";
+
+        let ref_path = make_tmp_file("annotation_ref", ".fa", reference);
+        let gff_path = make_tmp_file("annotation_ann", ".gff3", gff);
+        let vcf_path = make_tmp_file("annotation_ann", ".vcf", vcf);
+        let out_path = make_tmp_file("annotation_ann", ".tsv", "");
+        fs::remove_file(&out_path).unwrap();
+
+        let ret = run_annotation_vcf(
+            &ref_path.to_string_lossy(),
+            &gff_path.to_string_lossy(),
+            &vcf_path.to_string_lossy(),
+            &out_path.to_string_lossy(),
+            "tsv",
+        )
+        .unwrap();
+        assert_eq!(ret, 0);
+
+        let out_text = read_to_string(&out_path).unwrap();
+        let lines: Vec<&str> = out_text.lines().collect();
+        assert_eq!(lines[0], "chrom\tpos\tref\talt\ttype\tstatus\tgene_ids\ttranscript_ids\tfeature");
+        assert!(lines[1].contains("\t3\tA\tG\tSNV\tCDS\tGene1\tgene1;tx1\tCDS"));
+        assert!(lines[2].contains("\t6\tC\tT\tSNV\tIntron\tGene1\tgene1\ttranscript"));
+        assert!(lines[2].starts_with("chr1"));
+        assert!(lines[3].contains("\t18\tT\tA\tSNV\tGene-body\tGene1\tNA\tgene"));
+
+        cleanup(&[&ref_path, &gff_path, &vcf_path, &out_path]);
+    }
+
+    #[test]
+    fn test_run_annotation_vcf_json_output() {
+        let reference = ">chr1\nACGTACGTACGTACGTACGTAC\n";
+        let gff = "\
+chr1\tRefSeq\tgene\t1\t20\t.\t+\t.\tID=gene1;Name=Gene1
+chr1\tRefSeq\tmRNA\t1\t15\t.\t+\t.\tID=tx1;Parent=gene1
+chr1\tRefSeq\texon\t1\t5\t.\t+\t.\tID=ex1;Parent=tx1
+chr1\tRefSeq\tCDS\t1\t5\t.\t+\t.\tID=cds1;Parent=tx1
+";
+        let vcf = "\
+##fileformat=VCFv4.2
+#CHROM POS ID REF ALT QUAL FILTER INFO
+chr1\t3\t.\tA\tG\t.\t.\t.
+chr1\t6\t.\tC\tT\t.\t.\t.
+";
+
+        let ref_path = make_tmp_file("annotation_json_ref", ".fa", reference);
+        let gff_path = make_tmp_file("annotation_json_ann", ".gff3", gff);
+        let vcf_path = make_tmp_file("annotation_json_ann", ".vcf", vcf);
+        let out_path = make_tmp_file("annotation_json_ann", ".pickle", "");
+        fs::remove_file(&out_path).unwrap();
+        let side_path = out_path.with_extension("json");
+
+        let ret = run_annotation_vcf(
+            &ref_path.to_string_lossy(),
+            &gff_path.to_string_lossy(),
+            &vcf_path.to_string_lossy(),
+            &out_path.to_string_lossy(),
+            "json",
+        )
+        .unwrap();
+        assert_eq!(ret, 0);
+
+        let side = read_to_string(&side_path).unwrap();
+        assert!(side.starts_with("["));
+        assert!(side.contains("\"status\":\"CDS\""));
+        assert!(side.contains("\"status\":\"Intron\""));
+
+        cleanup(&[
+            &ref_path,
+            &gff_path,
+            &vcf_path,
+            &out_path,
+            &side_path,
+        ]);
+    }
+}
