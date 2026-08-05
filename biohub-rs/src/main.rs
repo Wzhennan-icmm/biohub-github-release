@@ -118,6 +118,264 @@ struct ScriptSpec {
     note: String,
 }
 
+#[derive(Clone)]
+struct ScatterPoint {
+    x: f64,
+    y: f64,
+    group: String,
+}
+
+const SVGPLOT_COLORS: [&str; 12] = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#17becf",
+    "#bcbd22",
+    "#e6550d",
+    "#6b6bd6",
+];
+
+fn svg_escape_xml(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\'' => out.push_str("&apos;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn svg_color(idx: usize) -> &'static str {
+    SVGPLOT_COLORS[idx % SVGPLOT_COLORS.len()]
+}
+
+fn downsample<T: Clone>(data: &[T], max_points: usize) -> Vec<T> {
+    if data.len() <= max_points {
+        return data.to_vec();
+    }
+    let step = (data.len() as f64 / max_points as f64).ceil() as usize;
+    data.iter().step_by(step.max(1)).cloned().collect()
+}
+
+fn write_scatter_svg(
+    path: &Path,
+    title: &str,
+    x_label: &str,
+    y_label: &str,
+    points: &[ScatterPoint],
+    point_radius: f64,
+    width: usize,
+    height: usize,
+    custom_x_ticks: Option<&[(f64, String)]>,
+) -> Result<i32> {
+    if points.is_empty() {
+        return Err("no data points for plot".into());
+    }
+
+    let mut x_min = f64::INFINITY;
+    let mut x_max = f64::NEG_INFINITY;
+    let mut y_min = f64::INFINITY;
+    let mut y_max = f64::NEG_INFINITY;
+
+    let mut groups: Vec<String> = Vec::new();
+    let mut group_to_idx: HashMap<String, usize> = HashMap::new();
+    for p in points {
+        x_min = x_min.min(p.x);
+        x_max = x_max.max(p.x);
+        y_min = y_min.min(p.y);
+        y_max = y_max.max(p.y);
+        if !group_to_idx.contains_key(&p.group) {
+            let idx = groups.len();
+            groups.push(p.group.clone());
+            group_to_idx.insert(p.group.clone(), idx);
+        }
+    }
+
+    if (x_max - x_min).abs() < 1e-9 {
+        x_max += 1.0;
+    }
+    if (y_max - y_min).abs() < 1e-9 {
+        y_max += 1.0;
+    }
+
+    let margin_left = 80.0;
+    let margin_right = 24.0;
+    let margin_top = 52.0;
+    let margin_bottom = 64.0;
+
+    let w = width as f64;
+    let h = height as f64;
+    let plot_w = w - margin_left - margin_right;
+    let plot_h = h - margin_top - margin_bottom;
+
+    let map_x = |x: f64| margin_left + ((x - x_min) / (x_max - x_min)) * plot_w;
+    let map_y = |y: f64| h - margin_bottom - ((y - y_min) / (y_max - y_min)) * plot_h;
+
+    let mut out = BufWriter::new(File::create(path)?);
+    writeln!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\">",
+        w = w,
+        h = h
+    )?;
+    writeln!(out, "<rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"#ffffff\"/>")?;
+    writeln!(
+        out,
+        "<text x=\"{title_x}\" y=\"{title_y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"22\" text-anchor=\"middle\">{}</text>",
+        svg_escape_xml(title),
+        title_x = margin_left + plot_w / 2.0,
+        title_y = 28.0
+    )?;
+
+    writeln!(
+        out,
+        "<rect x=\"{l}\" y=\"{t}\" width=\"{pw}\" height=\"{ph}\" fill=\"none\" stroke=\"#333\" stroke-width=\"1\"/>",
+        l = margin_left,
+        t = margin_top,
+        pw = plot_w,
+        ph = plot_h
+    )?;
+
+    let x_ticks = 8usize;
+    for i in 0..=x_ticks {
+        let ratio = i as f64 / x_ticks as f64;
+        let x = margin_left + ratio * plot_w;
+        let value = x_min + ratio * (x_max - x_min);
+        writeln!(
+            out,
+            "<line x1=\"{x}\" y1=\"{t}\" x2=\"{x}\" y2=\"{y2}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
+            t = margin_top + plot_h,
+            y2 = margin_top
+        )?;
+        writeln!(
+            out,
+            "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"middle\" fill=\"#333\">{value:.3}</text>",
+            x = x,
+            yt = margin_top + plot_h + 22.0,
+            value = value
+        )?;
+    }
+
+    if let Some(ticks) = custom_x_ticks {
+        for (value, label) in ticks.iter() {
+            if *value < x_min || *value > x_max {
+                continue;
+            }
+            let x = map_x(*value);
+            writeln!(
+                out,
+                "<line x1=\"{x}\" y1=\"{t}\" x2=\"{x}\" y2=\"{b}\" stroke=\"#555\" stroke-width=\"1\" stroke-dasharray=\"3 3\"/>",
+                t = margin_top + plot_h,
+                b = margin_top
+            )?;
+            writeln!(
+                out,
+                "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"10\" text-anchor=\"middle\" fill=\"#555\" transform=\"rotate(45 {x} {yt})\">{}</text>",
+                svg_escape_xml(label),
+                x = x,
+                yt = margin_top + plot_h + 36.0
+            )?;
+        }
+    }
+
+    let y_ticks = 8usize;
+    for i in 0..=y_ticks {
+        let ratio = i as f64 / y_ticks as f64;
+        let y = margin_top + plot_h - ratio * plot_h;
+        let value = y_min + ratio * (y_max - y_min);
+        writeln!(
+            out,
+            "<line x1=\"{l}\" y1=\"{y}\" x2=\"{r}\" y2=\"{y}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
+            l = margin_left,
+            r = margin_left + plot_w
+        )?;
+        writeln!(
+            out,
+            "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"end\" dy=\"4\" fill=\"#333\">{value:.3}</text>",
+            x = margin_left - 8.0,
+            y = y,
+            value = value
+        )?;
+    }
+
+    let x_axis_y = margin_top + plot_h;
+    let y_axis_x = margin_left;
+    writeln!(
+        out,
+        "<line x1=\"{y_axis_x}\" y1=\"{x_axis_y}\" x2=\"{x_axis_x2}\" y2=\"{x_axis_y}\" stroke=\"#333\" stroke-width=\"1.2\"/>",
+        x_axis_x2 = margin_left + plot_w
+    )?;
+    writeln!(
+        out,
+        "<line x1=\"{y_axis_x}\" y1=\"{y_axis_y}\" x2=\"{y_axis_x}\" y2=\"{y_axis_end}\" stroke=\"#333\" stroke-width=\"1.2\"/>",
+        y_axis_y = margin_top,
+        y_axis_end = margin_top + plot_h
+    )?;
+
+    writeln!(
+        out,
+        "<text x=\"{}\" y=\"{}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"14\" text-anchor=\"middle\">{}</text>",
+        margin_left + plot_w / 2.0,
+        h - 20.0,
+        svg_escape_xml(x_label)
+    )?;
+    writeln!(
+        out,
+        "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"14\" text-anchor=\"middle\" transform=\"rotate(-90 {x} {y})\">{label}</text>",
+        x = margin_left - 46.0,
+        y = margin_top + plot_h / 2.0,
+        label = svg_escape_xml(y_label)
+    )?;
+
+    for p in points {
+        let cx = map_x(p.x);
+        let cy = map_y(p.y);
+        let gi = *group_to_idx.get(&p.group).unwrap_or(&0);
+        let color = svg_color(gi);
+        writeln!(
+            out,
+            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{r}\" fill=\"{color}\" fill-opacity=\"0.45\" stroke=\"#333\" stroke-width=\"0.2\"/>",
+            cx,
+            cy,
+            r = point_radius,
+            color = color
+        )?;
+    }
+
+    let legend_x = margin_left + plot_w - 140.0;
+    let mut legend_y = margin_top + 12.0;
+    for (idx, group) in groups.iter().enumerate() {
+        let color = svg_color(idx);
+        writeln!(
+            out,
+            "<circle cx=\"{}\" cy=\"{}\" r=\"5\" fill=\"{}\" />",
+            legend_x,
+            legend_y,
+            color
+        )?;
+        writeln!(
+            out,
+            "<text x=\"{}\" y=\"{}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" fill=\"#333\">{}</text>",
+            legend_x + 8.0,
+            legend_y + 4.0,
+            svg_escape_xml(group)
+        )?;
+        legend_y += 15.0;
+    }
+
+    writeln!(out, "</svg>")?;
+    Ok(0)
+}
 const SCRIPT_CATALOG_TEXT: &str = include_str!("script_catalog.tsv");
 
 fn load_script_catalog() -> Vec<ScriptSpec> {
@@ -3511,18 +3769,27 @@ fn run_get_four_degenerate_sites(pal2nal_dir: &str, out_dir: &str) -> Result<i32
 }
 
 fn run_plot_depth_pandepth(input: &str, output: &str, min_chr_length_mb: f64) -> Result<i32> {
+    run_plot_depth_pandepth_impl(input, output, min_chr_length_mb, false)
+}
+
+fn run_plot_depth_pandepth_impl(
+    input: &str,
+    output: &str,
+    min_chr_length_mb: f64,
+    styled: bool,
+) -> Result<i32> {
     let min_len_bp = (min_chr_length_mb * 1_000_000.0) as usize;
     fs::create_dir_all(output)?;
     let mut reader = open_reader(input)?;
     let mut line = String::new();
     let mut header: Vec<String> = Vec::new();
-    let mut chr_idx = None;
-    let mut start_idx = None;
-    let mut end_idx = None;
-    let mut depth_idx = None;
-    let mut gc_idx = None;
+    let mut chr_idx = 0usize;
+    let mut start_idx = 1usize;
+    let mut end_idx = 2usize;
+    let mut depth_idx = 3usize;
+    let mut gc_idx = 4usize;
 
-    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut rows: Vec<(String, usize, usize, f64, f64)> = Vec::new();
     while reader.read_line(&mut line)? > 0 {
         let raw = line.trim_end_matches(['\n', '\r']).to_string();
         line.clear();
@@ -3534,73 +3801,104 @@ fn run_plot_depth_pandepth(input: &str, output: &str, min_chr_length_mb: f64) ->
                 let cols = raw.trim_start_matches('#').trim();
                 if !cols.is_empty() && !cols.starts_with('#') {
                     header = cols.split('\t').map(|v| v.to_string()).collect();
-                    chr_idx = header.iter().position(|v| v == "Chr");
-                    start_idx = header.iter().position(|v| v == "Start");
-                    end_idx = header.iter().position(|v| v == "End");
-                    depth_idx = header.iter().position(|v| v == "MeanDepth");
-                    gc_idx = header.iter().position(|v| v == "GC(%)");
+                    chr_idx = header.iter().position(|v| v == "Chr").unwrap_or(0);
+                    start_idx = header.iter().position(|v| v == "Start").unwrap_or(1);
+                    end_idx = header.iter().position(|v| v == "End").unwrap_or(2);
+                    depth_idx = header.iter().position(|v| v == "MeanDepth").unwrap_or(3);
+                    gc_idx = header.iter().position(|v| v == "GC(%)").unwrap_or(4);
                 }
             }
             continue;
         }
-        let cols: Vec<&str> = raw.split('\t').collect();
-        if cols.len() < 5 || header.is_empty() {
+        let cols: Vec<&str> = raw.split_whitespace().collect();
+        if cols.len() < 5 || cols.is_empty() {
             continue;
         }
-        let ci = chr_idx.unwrap_or(0);
-        let si = start_idx.unwrap_or(1);
-        let ei = end_idx.unwrap_or(2);
-        let di = depth_idx.unwrap_or(3);
-        let gi = gc_idx.unwrap_or(4);
-        if ci >= cols.len() || si >= cols.len() || ei >= cols.len() || di >= cols.len() || gi >= cols.len() {
-            continue;
-        }
-        let chr = cols[ci].to_string();
-        let start: usize = cols[si].parse().unwrap_or(0);
-        let end: usize = cols[ei].parse().unwrap_or(0);
-        let depth: f64 = cols[di].parse().unwrap_or(0.0);
-        let gc: f64 = cols[gi].parse().unwrap_or(0.0);
+        let chr = cols.get(chr_idx).unwrap_or(&cols[0]).to_string();
+        let start: usize = cols
+            .get(start_idx)
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        let end: usize = cols
+            .get(end_idx)
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        let depth: f64 = cols
+            .get(depth_idx)
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let gc: f64 = cols
+            .get(gc_idx)
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
         if start > end {
             continue;
         }
-        rows.push(vec![chr, start.to_string(), end.to_string(), depth.to_string(), gc.to_string()]);
+        rows.push((chr, start, end, depth, gc));
+    }
+
+    if rows.is_empty() {
+        return Err("no valid rows found for plot-depth-pandepth".into());
     }
 
     let mut len_map: HashMap<String, usize> = HashMap::new();
     let mut depth_sum: HashMap<String, (f64, usize)> = HashMap::new();
     let mut gc_sum: HashMap<String, (f64, usize)> = HashMap::new();
-
-    for r in &rows {
-        let chr = &r[0];
-        let _start: usize = r[1].parse().unwrap_or(0);
-        let end: usize = r[2].parse().unwrap_or(0);
-        let depth: f64 = r[3].parse().unwrap_or(0.0);
-        let gc: f64 = r[4].parse().unwrap_or(0.0);
-        len_map.entry(chr.clone()).and_modify(|v| if end > *v { *v = end }).or_insert(end);
-        depth_sum.entry(chr.clone()).and_modify(|(s, n)| {
-            *s += depth;
-            *n += 1;
-        }).or_insert((depth, 1));
-        gc_sum.entry(chr.clone()).and_modify(|(s, n)| {
-            *s += gc;
-            *n += 1;
-        }).or_insert((gc, 1));
+    for (chr, _start, end, depth, gc) in &rows {
+        len_map
+            .entry(chr.clone())
+            .and_modify(|v| {
+                if *end > *v {
+                    *v = *end;
+                }
+            })
+            .or_insert(*end);
+        depth_sum
+            .entry(chr.clone())
+            .and_modify(|(s, n)| {
+                *s += *depth;
+                *n += 1;
+            })
+            .or_insert((*depth, 1));
+        gc_sum
+            .entry(chr.clone())
+            .and_modify(|(s, n)| {
+                *s += *gc;
+                *n += 1;
+            })
+            .or_insert((*gc, 1));
     }
 
-    let mut filtered: Vec<Vec<String>> = Vec::new();
-    for r in rows {
-        let chr = &r[0];
-        let len = *len_map.get(chr).unwrap_or(&0);
+    let mut filtered: Vec<(String, usize, usize, f64, f64)> = Vec::new();
+    let mut plot_points: Vec<ScatterPoint> = Vec::new();
+        for row in rows {
+        let chr = row.0.clone();
+        let len = *len_map.get(&chr).unwrap_or(&0);
         if len >= min_len_bp {
-            filtered.push(r);
+            filtered.push(row.clone());
+            plot_points.push(ScatterPoint {
+                x: row.4,
+                y: row.3,
+                group: chr,
+            });
         }
     }
 
+    if filtered.is_empty() {
+        return Err(format!(
+            "no chromosome longer than {min_len_bp} bp in input"
+        )
+        .into());
+    }
+
+    let mut stats_rows: Vec<String> = len_map.keys().cloned().collect();
+    stats_rows.sort_unstable();
     let mut out_stats = BufWriter::new(File::create(Path::new(output).join("chromosome_stats.tsv"))?);
     writeln!(out_stats, "Chr\tlength\tmean_depth\tmean_gc")?;
-    for (chr, len) in &len_map {
-        let (dsum, dcnt) = depth_sum.get(chr).copied().unwrap_or((0.0, 0));
-        let (gsum, gcnt) = gc_sum.get(chr).copied().unwrap_or((0.0, 0));
+    for chr in stats_rows {
+        let len = *len_map.get(&chr).unwrap_or(&0);
+        let (dsum, dcnt) = depth_sum.get(&chr).copied().unwrap_or((0.0, 0));
+        let (gsum, gcnt) = gc_sum.get(&chr).copied().unwrap_or((0.0, 0));
         let dmean = if dcnt == 0 { 0.0 } else { dsum / dcnt as f64 };
         let gmean = if gcnt == 0 { 0.0 } else { gsum / gcnt as f64 };
         writeln!(out_stats, "{chr}\t{len}\t{dmean}\t{gmean}")?;
@@ -3608,14 +3906,37 @@ fn run_plot_depth_pandepth(input: &str, output: &str, min_chr_length_mb: f64) ->
 
     let mut out_data = BufWriter::new(File::create(Path::new(output).join("filtered_depth.tsv"))?);
     writeln!(out_data, "Chr\tStart\tEnd\tMeanDepth\tGC(%)")?;
-    for r in filtered {
-        writeln!(out_data, "{chr}\t{start}\t{end}\t{depth}\t{gc}", chr = r[0], start = r[1], end = r[2], depth = r[3], gc = r[4])?;
+    for (chr, start, end, depth, gc) in filtered {
+        writeln!(out_data, "{chr}\t{start}\t{end}\t{depth}\t{gc}")?;
     }
+
+    let svg_points = downsample(&plot_points, if styled { 40000 } else { 25000 });
+    let svg_file = if styled {
+        Path::new(output).join("depth_gc_styled.svg")
+    } else {
+        Path::new(output).join("depth_gc_scatter.svg")
+    };
+    write_scatter_svg(
+        &svg_file,
+        if styled {
+            "Pandepth depth vs GC (styled)"
+        } else {
+            "Pandepth depth vs GC"
+        },
+        "GC(%)",
+        "MeanDepth",
+        &svg_points,
+        if styled { 1.0 } else { 1.6 },
+        1400,
+        900,
+        None,
+    )?;
+
     Ok(0)
 }
 
 fn run_plot_depth_pandepth2(input: &str, output: &str, min_chr_length_mb: f64) -> Result<i32> {
-    run_plot_depth_pandepth(input, output, min_chr_length_mb)
+    run_plot_depth_pandepth_impl(input, output, min_chr_length_mb, true)
 }
 
 fn run_plot_mosdepth_point(input: &str, output: &str, min_length: usize) -> Result<i32> {
@@ -3631,7 +3952,7 @@ fn run_plot_mosdepth_point(input: &str, output: &str, min_length: usize) -> Resu
         if raw.is_empty() {
             continue;
         }
-        let cols: Vec<&str> = raw.split('\t').collect();
+        let cols: Vec<&str> = raw.split_whitespace().collect();
         if cols.len() < 4 {
             continue;
         }
@@ -3649,13 +3970,78 @@ fn run_plot_mosdepth_point(input: &str, output: &str, min_length: usize) -> Resu
 
     let mut out = BufWriter::new(File::create(Path::new(output).join("mosdepth_points.tsv"))?);
     writeln!(out, "chrom\tstart\tend\tcoverage\tstatus")?;
-    for (c, s, e, cov) in data {
-        if let Some(len) = len_map.get(&c) {
+    for (c, s, e, cov) in data.iter() {
+        if let Some(len) = len_map.get(c.as_str()) {
             if *len >= min_length {
                 writeln!(out, "{c}\t{s}\t{e}\t{cov}\tOK")?;
             }
         }
     }
+
+    let mut chr_rows: Vec<(String, usize)> = len_map.iter().map(|(c, l)| (c.clone(), *l)).collect();
+    chr_rows.sort_by(|a, b| a.0.cmp(&b.0));
+    chr_rows = chr_rows
+        .into_iter()
+        .filter(|(_, l)| *l >= min_length)
+        .collect();
+    if chr_rows.is_empty() {
+        return Err(format!("No chromosome longer than {min_length} bp").into());
+    }
+
+    let mut chr_order: Vec<String> = Vec::new();
+    let mut chr_offsets: HashMap<String, f64> = HashMap::new();
+    let mut cursor: f64 = 0.0;
+    for (chr, len) in &chr_rows {
+        chr_order.push(chr.clone());
+        chr_offsets.insert(chr.clone(), cursor);
+        cursor += *len as f64 + 1_000_000.0_f64.max(*len as f64 * 0.01);
+    }
+
+    let mut points: Vec<ScatterPoint> = Vec::new();
+    let mut custom_ticks: Vec<(f64, String)> = Vec::new();
+    for (c, start, end, cov) in &data {
+        if let Some(len) = len_map.get(c) {
+            if *len < min_length {
+                continue;
+            }
+            let offset = chr_offsets.get(c).cloned().unwrap_or(0.0);
+            let center = (*start + *end) as f64 / 2.0 + offset;
+            points.push(ScatterPoint {
+                x: center,
+                y: *cov,
+                group: c.clone(),
+            });
+        }
+    }
+    if points.is_empty() {
+        return Err("No data points after filtering by chromosome length".into());
+    }
+
+    let mut cumulative = 0.0;
+    for (idx, chr) in chr_order.iter().enumerate() {
+        if idx == 0 {
+            cumulative = *chr_offsets.get(chr).unwrap_or(&0.0);
+        }
+        if let Some(len) = len_map.get(chr) {
+            let center = cumulative + (*len as f64) / 2.0;
+            custom_ticks.push((center, chr.clone()));
+            cumulative += (*len as f64) + 1_000_000.0_f64.max(*len as f64 * 0.01);
+        }
+    }
+
+    let sampled = downsample(&points, 60000);
+    let svg_path = Path::new(output).join("mosdepth_scatter.svg");
+    write_scatter_svg(
+        &svg_path,
+        "Mosdepth point coverage",
+        "Cumulative coordinate (bp)",
+        "Coverage",
+        &sampled,
+        1.2,
+        1600,
+        900,
+        Some(&custom_ticks),
+    )?;
     Ok(0)
 }
 

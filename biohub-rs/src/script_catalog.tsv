@@ -43,9 +43,9 @@ merge-two-end-bam1	run_merge_two_end_bam1.py	Pair-end BAM merge by read_name	imp
 merge-two-end-bam-forMGI	run_merge_two_end_bam_forMGI.py	Pair-end BAM merge by read_name (MGI)	implemented	Rust rewrite using samtools stream join
 get-diff-sites-from-orthology	run_get_diff_sites_from_orthology.py	Compute degenerate differences from orthology alignments	implemented	Rust rewrite with shared four-fold codon scan
 get-four-degenerate-sites	run_get_four_degenerate_sites.py	Compute four-fold degenerate sites	implemented	Rust implementation for four-fold codon scanning
-plot-depth-pandepth	run_plot_depth_for_Pandepth.py	Plot depth/GC from pandepth table	implemented	Text output: filtered sites and per-chrom stats
-plot-depth-pandepth2	run_plot_depth_for_Pandepth2.py	Plot depth/GC with custom styling	implemented	Alias to plot-depth-pandepth parser/output
-plot-mosdepth-point	run_plot_depth_for_mosdepth_point.py	Plot mosdepth scatter depth data	implemented	Text output with per-locus filtering by chromosome length
+plot-depth-pandepth	run_plot_depth_for_Pandepth.py	Plot depth/GC from pandepth table	implemented	Outputs chromosome_stats.tsv, filtered_depth.tsv and depth_gc_scatter.svg
+plot-depth-pandepth2	run_plot_depth_for_Pandepth2.py	Plot depth/GC with custom styling	implemented	Alias parser with depth_gc_styled.svg output
+plot-mosdepth-point	run_plot_depth_for_mosdepth_point.py	Plot mosdepth scatter depth data	implemented	Outputs mosdepth_points.tsv and mosdepth_scatter.svg
 trim-ttaggg-fastq	run_trim_TTAGGG_for_fastq.py	Filter reads by TTAGGG motif at head/tail	implemented	Rust filter on forward/reverse TTAGGG rotations
 annotation-vcf	annotation_VCF_python3.py	Annotate VCF with CDS context	implemented	Rust annotation summary (TXT, not pickle)
 compare-orthology	run_get_diff_sites_from_orthology.py	Alias for orthology compare flow	implemented	Alias to get-diff-sites-from-orthology
