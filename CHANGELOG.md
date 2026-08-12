@@ -16,6 +16,8 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
 - Parse whitespace- and pipe-delimited MUMmer coordinate tables.
 - Reject release tags that do not match Cargo package version.
 - Add process-level CLI tests for help exit codes, JSON catalog metadata, and unknown commands.
+- Add a comprehensive Chinese functional manual covering all 54 catalog commands.
+- Add and exercise a synthetic MUMmer coords dotplot fixture.
 
 ## 0.2.1
 

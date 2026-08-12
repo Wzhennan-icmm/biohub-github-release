@@ -5,6 +5,8 @@ annotation, comparative genomics, population analysis, and expression workflows.
 Core commands are implemented in Rust. R-backed visual and statistical commands
 are added through an explicit, versioned backend contract.
 
+中文完整文档：[BioHub v0.3 功能说明书](docs/USER_GUIDE.zh-CN.md)
+
 ## Install
 
 ### Native core
@@ -88,7 +90,8 @@ cargo clippy --locked -- -D warnings
 cargo test --locked
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md),
+See the [Chinese functional manual](docs/USER_GUIDE.zh-CN.md),
+[CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md),
 [CITATION.cff](CITATION.cff), and [AI usage disclosure](docs/AI_USAGE.md).
 
 ## License and third-party code

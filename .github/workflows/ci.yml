@@ -41,3 +41,7 @@ jobs:
           docker run --rm biohub:test run dotplot
           --input /usr/local/share/biohub/examples/dotplot/input.paf
           --output /tmp/dotplot.pdf --format paf
+      - run: >-
+          docker run --rm biohub:test run dotplot
+          --input /usr/local/share/biohub/examples/dotplot/input.coords
+          --output /tmp/dotplot.png --format coords

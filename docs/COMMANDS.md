@@ -4,6 +4,9 @@
 Every record reports ID, original source, status, category, backend, and external
 dependencies.
 
+User-facing syntax, inputs, outputs, limitations, and tutorials are documented in
+the [Chinese functional manual](USER_GUIDE.zh-CN.md).
+
 Support levels:
 
 - **stable**: documented inputs/outputs, regression fixture, CI execution.
