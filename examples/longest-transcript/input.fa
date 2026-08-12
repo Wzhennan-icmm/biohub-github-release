@@ -1,0 +1,6 @@
+>txA.1 gene=GeneA
+ATGC
+>txA.2 gene=GeneA
+ATGCAA
+>txB.1 gene=GeneB
+TTAA

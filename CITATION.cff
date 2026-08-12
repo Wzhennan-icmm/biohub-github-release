@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use BioHub, please cite its archived release and associated software paper."
+title: "BioHub: reproducible command-line utilities for plant genomics"
+version: 0.3.0
+license: MIT
+repository-code: "https://github.com/Wzhennan-icmm/biohub-github-release"
+authors:
+  - name: "BioHub contributors"

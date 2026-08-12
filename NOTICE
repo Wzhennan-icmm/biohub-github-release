@@ -1,0 +1,9 @@
+BioHub contains original code licensed under MIT.
+
+Third-party component: dotPlotly
+Copyright (c) 2017 Tom Poorten
+License: MIT
+
+When dotPlotly source is vendored into this repository, retain its complete
+upstream MIT license and this attribution. Do not relabel upstream source as
+BioHub-authored code.

@@ -1,0 +1,5 @@
+.git
+biohub-rs/target
+*.DS_Store
+docs/data
+tests/data

@@ -1,4 +1,5 @@
 #id	source	description	status	note
+dotplot	r/dotplot.R	Generate static alignment dot plot from PAF or MUMmer coords	implemented	Base R backend; PDF/PNG output selected by extension
 change-scaffolds-name	run_change_scaffolds_name.py	Replace first field IDs from mapping file	implemented	No external dependencies
 change-scaffolds-name-fasta	run_change_scaffolds_name_fasta.py	Rename FASTA headers with mapping table	implemented	No external dependencies
 change-seqname-for-fasta	run_change_seqName_for_fasta.py	Rename headers in all *.aln files under directory	implemented	No external dependencies
@@ -36,7 +37,7 @@ get-best-hit-for-scan	run_get_best_hit_from_blast.py	Compatibility alias	impleme
 extract-gene-family-info	run_extract_gene_family_info.py	Expression split by family/length	implemented	Rust rewrite with family full/partial outputs
 extract-gene-family-matrix	run_extract_gene_family_matrix.py	Expression matrix per family	implemented	Rust rewrite with coverage-based parent/child sums
 extract-gene-family-info-alt	run_extract_longest_pep_from_ensembl_download.py	Alt alias	implemented	See extract-longest-pep
-orthofiner-to-pal2nal	run_orthofiner_to_pal2nal.py	Build pal2nal-ready alignments	implemented	Rust rewrite uses external mafft/pal2nal pipeline
+orthofiner-to-pal2nal	run_orthofiner_to_pal2nal.py	Build validated PAL2NAL codon alignments	implemented	Checks CDS completeness/frame and writes validation_summary.tsv; uses MAFFT and PAL2NAL -nogap
 convert-gene-annotation-contigs2chr	run_convert_gene_annotation_contigs2Chr_PASA.py	Alias	implemented	Alias to convert-gene-annotation-contigs2chr-PASA
 merge-two-end-bam	run_merge_two_end_bam.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join
 merge-two-end-bam1	run_merge_two_end_bam1.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join
