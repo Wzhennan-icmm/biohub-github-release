@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: biohub-linux-x86_64
+          - os: macos-13
+            asset: biohub-macos-x86_64
+          - os: macos-14
+            asset: biohub-macos-aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify tag matches crate version
+        shell: bash
+        run: |
+          crate_version=$(awk -F '"' '/^version =/ {print $2; exit}' biohub-rs/Cargo.toml)
+          test "v${crate_version}" = "${GITHUB_REF_NAME}"
+      - run: cargo build --locked --release
+        working-directory: biohub-rs
+      - name: Assemble release archive
+        run: |
+          mkdir -p dist/${{ matrix.asset }}/bin
+          mkdir -p dist/${{ matrix.asset }}/share/biohub
+          cp biohub-rs/target/release/biohub dist/${{ matrix.asset }}/bin/
+          cp -R r dist/${{ matrix.asset }}/share/biohub/
+          cp -R compat dist/${{ matrix.asset }}/share/biohub/
+          cp -R docs examples dist/${{ matrix.asset }}/share/biohub/
+          cp LICENSE NOTICE README.md CHANGELOG.md CITATION.cff CONTRIBUTING.md SECURITY.md dist/${{ matrix.asset }}/
+          tar -C dist -czf ${{ matrix.asset }}.tar.gz ${{ matrix.asset }}
+      - run: shasum -a 256 ${{ matrix.asset }}.tar.gz > ${{ matrix.asset }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.tar.gz
+            ${{ matrix.asset }}.tar.gz.sha256
+
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/**/*

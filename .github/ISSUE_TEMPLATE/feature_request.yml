@@ -1,0 +1,22 @@
+name: Command or feature request
+description: Propose an extensible research workflow capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Research need and target users
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: Proposed inputs, outputs, and external dependencies
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation fixture or public/deidentified data source
+    validations:
+      required: true
