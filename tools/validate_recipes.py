@@ -13,6 +13,14 @@ import subprocess
 
 
 REQUIRED_FILES = {"Snakefile", "config.example.yaml", "config.schema.yaml"}
+RECIPE_GUIDE_SECTIONS = (
+    "### 适用场景与边界",
+    "### 输入准备",
+    "### 配置字段",
+    "### 运行步骤",
+    "### 产物与解读",
+    "### 失败、恢复与发表核对",
+)
 DISALLOWED_R = (
     "install.packages(",
     "install_github(",
@@ -56,6 +64,14 @@ def read_catalog(path: Path) -> list[dict[str, str]]:
     return rows
 
 
+def example_config_keys(path: Path) -> set[str]:
+    return {
+        match.group(1)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if (match := re.match(r"^([A-Za-z0-9_]+):", line))
+    }
+
+
 def yaml_contract(path: Path, example: Path) -> None:
     schema_lines = path.read_text(encoding="utf-8").splitlines()
     properties = set()
@@ -82,15 +98,65 @@ def yaml_contract(path: Path, example: Path) -> None:
             match = re.match(r"^  ([A-Za-z0-9_]+):", line)
             if match:
                 properties.add(match.group(1))
-    example_keys = {
-        match.group(1)
-        for line in example.read_text(encoding="utf-8").splitlines()
-        if (match := re.match(r"^([A-Za-z0-9_]+):", line))
-    }
+    example_keys = example_config_keys(example)
     if not properties or required != properties:
         raise ValueError(f"all schema properties must be required: {path}")
     if example_keys != properties:
         raise ValueError(f"example/schema key mismatch: {example}")
+
+
+def validate_local_markdown_links(paths: list[Path]) -> None:
+    link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    for source in paths:
+        text = source.read_text(encoding="utf-8")
+        for raw_target in link_pattern.findall(text):
+            target = raw_target.strip().split(" ", 1)[0].strip("<>")
+            if not target or target.startswith(("#", "http://", "https://", "mailto:")):
+                continue
+            relative = target.split("#", 1)[0]
+            if relative and not (source.parent / relative).resolve().exists():
+                raise ValueError(f"broken local Markdown link in {source}: {target}")
+
+
+def validate_recipe_guide(root: Path, catalog: list[dict[str, str]]) -> None:
+    guide_path = root / "docs/RECIPES.zh-CN.md"
+    guide = guide_path.read_text(encoding="utf-8")
+    if "文档版本：0.4.0" not in guide:
+        raise ValueError("recipe guide version does not match release")
+    for private_marker in ("/Users/", "/mnt/kobe/"):
+        if private_marker in guide:
+            raise ValueError(f"private path in recipe guide: {private_marker}")
+
+    for row in catalog:
+        marker = f"## `{row['id']}`"
+        if guide.splitlines().count(marker) != 1:
+            raise ValueError(f"recipe guide needs exactly one section: {row['id']}")
+        start = guide.index(marker) + len(marker)
+        next_heading = guide.find("\n## ", start)
+        section = guide[start:] if next_heading == -1 else guide[start:next_heading]
+        missing_sections = [name for name in RECIPE_GUIDE_SECTIONS if name not in section]
+        if missing_sections:
+            raise ValueError(
+                f"recipe guide section {row['id']} lacks {missing_sections}"
+            )
+        config = root / "recipes" / row["config_template"]
+        missing_keys = sorted(
+            key for key in example_config_keys(config) if f"`{key}`" not in section
+        )
+        if missing_keys:
+            raise ValueError(
+                f"recipe guide section {row['id']} lacks config keys {missing_keys}"
+            )
+
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    command_guide = (root / "docs/USER_GUIDE.zh-CN.md").read_text(encoding="utf-8")
+    if "docs/RECIPES.zh-CN.md" not in readme:
+        raise ValueError("README does not link recipe guide")
+    if "RECIPES.zh-CN.md" not in command_guide:
+        raise ValueError("command guide does not link recipe guide")
+    validate_local_markdown_links(
+        [root / "README.md", root / "docs/USER_GUIDE.zh-CN.md", guide_path]
+    )
 
 
 def validate_migration_matrix(path: Path) -> int:
@@ -245,9 +311,10 @@ def main() -> int:
     migration_count = validate_migration_matrix(
         root / "docs/SCRIPT_MIGRATION_MATRIX.tsv"
     )
+    validate_recipe_guide(root, catalog)
     print(
         f"recipes={len(catalog)} python={python_count} "
-        f"r={r_count} migration_rows={migration_count}"
+        f"r={r_count} migration_rows={migration_count} recipe_guide=ok"
     )
     return 0
 

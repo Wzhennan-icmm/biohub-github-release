@@ -25,6 +25,8 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
   container digest hook, stable bundle checksums, and managed-path collision checks.
 - Build five pinned domain images, preflight every included recipe dependency,
   and execute four synthetic low-risk workflows in image CI.
+- Add a publication-oriented Chinese recipe manual covering every config field,
+  input contract, output, recovery path, and reporting checklist.
 
 ## 0.3.0 - Development snapshot
 

@@ -3,6 +3,7 @@ use std::{env, fs};
 
 const SCRIPT_CATALOG: &str = include_str!("../src/script_catalog.tsv");
 const CHINESE_USER_GUIDE: &str = include_str!("../../docs/USER_GUIDE.zh-CN.md");
+const CHINESE_RECIPE_GUIDE: &str = include_str!("../../docs/RECIPES.zh-CN.md");
 const ROOT_README: &str = include_str!("../../README.md");
 
 fn biohub(args: &[&str]) -> std::process::Output {
@@ -116,8 +117,12 @@ fn chinese_user_guide_documents_every_catalog_command_once() {
 #[test]
 fn readme_links_chinese_user_guide_without_local_paths() {
     assert!(ROOT_README.contains("docs/USER_GUIDE.zh-CN.md"));
+    assert!(ROOT_README.contains("docs/RECIPES.zh-CN.md"));
     assert!(CHINESE_USER_GUIDE.contains("文档版本：0.4.0"));
+    assert!(CHINESE_USER_GUIDE.contains("RECIPES.zh-CN.md"));
+    assert!(CHINESE_RECIPE_GUIDE.contains("文档版本：0.4.0"));
     assert!(!CHINESE_USER_GUIDE.contains("/Users/"));
+    assert!(!CHINESE_RECIPE_GUIDE.contains("/Users/"));
 }
 
 #[test]

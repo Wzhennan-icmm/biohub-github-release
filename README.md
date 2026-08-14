@@ -5,7 +5,8 @@ annotation, comparative genomics, population analysis, and expression workflows.
 Core commands are implemented in Rust. R-backed visual and statistical commands
 are added through an explicit, versioned backend contract.
 
-中文完整文档：[BioHub v0.4 功能说明书](docs/USER_GUIDE.zh-CN.md)
+中文文档：[BioHub v0.4 功能说明书](docs/USER_GUIDE.zh-CN.md)；
+[13 个 Recipe 使用与发表复现手册](docs/RECIPES.zh-CN.md)
 
 ## Install
 
@@ -65,6 +66,9 @@ Thirteen experimental Snakemake recipes cover comparative genomics, assembly,
 population analysis, de novo mutation rates, RNA-seq, enrichment, and microbiome
 RDA. Each pack includes config schema/template, workflow, validation, summaries,
 input checksums, logs, README, and archive target.
+
+Detailed inputs, every config field, result interpretation, recovery, and
+publication checklists are documented in the [Chinese recipe manual](docs/RECIPES.zh-CN.md).
 
 ```bash
 biohub recipe init selection-branch-site --workdir analysis-config

@@ -10,3 +10,4 @@
 8. Run `python3 tools/validate_recipes.py --require-r`; verify every recipe path is packaged.
 9. For domain images, record immutable image digest and exact environment export; never publish a mutable-only tag.
 10. Run recipe helper regressions, all 13 DAG dry-runs, and four synthetic safe executions; archive logs.
+11. Verify release archive contains `docs/USER_GUIDE.zh-CN.md` and `docs/RECIPES.zh-CN.md`; validate all local Markdown links.
