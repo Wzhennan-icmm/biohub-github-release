@@ -5,7 +5,7 @@ annotation, comparative genomics, population analysis, and expression workflows.
 Core commands are implemented in Rust. R-backed visual and statistical commands
 are added through an explicit, versioned backend contract.
 
-中文完整文档：[BioHub v0.3 功能说明书](docs/USER_GUIDE.zh-CN.md)
+中文完整文档：[BioHub v0.4 功能说明书](docs/USER_GUIDE.zh-CN.md)
 
 ## Install
 
@@ -18,10 +18,10 @@ cargo build --release --locked
 ./target/release/biohub --help
 ```
 
-Release archives provide Linux/macOS binaries plus R backends, compatibility
-wrappers, licenses, and metadata. Verify release SHA256 files before use.
+Release archives provide Linux/macOS binaries plus R backends, recipes,
+compatibility wrappers, licenses, and metadata. Verify release SHA256 files before use.
 
-### Reproducible container
+### Core container
 
 ```bash
 docker build -t biohub:local .
@@ -29,17 +29,21 @@ docker run --rm biohub:local catalog --format json
 docker run --rm -v "$PWD:/work" -w /work biohub:local doctor
 ```
 
-Container includes `Rscript`, `samtools`, `mafft`, and `pal2nal.pl`. Hamstr is an
-optional host-provided dependency.
+Core container includes `Rscript`, `samtools`, `mafft`, `pal2nal.pl`, recipes, and
+fixtures. Domain recipes need dependencies listed by `biohub doctor --recipe ID`.
+Local builds use mutable upstream package repositories and are not bitwise locked;
+for publication, retain released image digest plus exact environment export.
 
 ## Stable command surface
 
 ```bash
 biohub catalog
-biohub catalog --format json
+biohub catalog --format json --kind command
+biohub catalog --format json --kind recipe
 biohub run annotation-vcf --help
 biohub run annotation-vcf --reference ref.fa --gff genes.gff3 --vcf calls.vcf --output calls.tsv
 biohub doctor
+biohub recipe list
 biohub run dotplot --input alignments.paf --output dotplot.pdf --format paf
 ```
 
@@ -55,14 +59,42 @@ through v1.x. Existing direct command groups remain available:
 
 Run `biohub catalog` for complete IDs, source provenance, status, and dependencies.
 
+## Reproducible recipes
+
+Thirteen experimental Snakemake recipes cover comparative genomics, assembly,
+population analysis, de novo mutation rates, RNA-seq, enrichment, and microbiome
+RDA. Each pack includes config schema/template, workflow, validation, summaries,
+input checksums, logs, README, and archive target.
+
+```bash
+biohub recipe init selection-branch-site --workdir analysis-config
+# Edit config.yaml; copied config.schema.yaml defines accepted fields.
+# REQUIRED/null values are placeholders.
+biohub doctor --recipe selection-branch-site --strict
+biohub recipe validate selection-branch-site --config analysis-config/config.yaml
+biohub recipe run selection-branch-site \
+  --config analysis-config/config.yaml --workdir runs/selection-001 --cores 8
+biohub recipe report --workdir runs/selection-001
+```
+
+Runs reject overwrite. `--resume` requires unchanged recipe ID and config SHA256.
+`versions.tsv` records every declared dependency as versioned, unavailable, or
+available without a safe version probe. `provenance.json` records workflow SHA256
+and container hint; set `BIOHUB_CONTAINER_DIGEST` to preserve runtime image digest.
+`recipe.sources.sha256` covers packaged workflow, schema, and helper sources.
+`checksums.sha256` covers immutable bundle files and excludes mutable `run.json`.
+Packaged Slurm profile uses Snakemake executor plugin and conservative one-job
+default; copy it and add site-approved resources before cluster use.
+
 New `biohub run <script-id>` protects primary outputs from accidental overwrite.
 Pass `--force` to replace an existing primary output. Legacy `scripts run` and
 historic wrapper commands keep prior overwrite behavior through v1.x.
 
-`orthofiner-to-pal2nal` validates unique sequence IDs, matched CDS records, CDS
+`orthofinder-to-pal2nal` validates unique sequence IDs, matched CDS records, CDS
 length divisibility by three, and per-group protein/CDS counts before alignment.
 It writes `validation_summary.tsv`, runs PAL2NAL with `-nogap`, and returns non-zero
 when any orthogroup is skipped or fails.
+The historical misspelling `orthofiner-to-pal2nal` remains an alias through v1.x.
 
 ## Dependencies and reproducibility
 
@@ -76,9 +108,9 @@ private genomes, sample identifiers, credentials, or unpublished results.
 
 ## R commands
 
-`biohub r list` shows R-backed commands. `biohub run dotplot` and
-`biohub r run dotplot` are equivalent. `dotplot` accepts PAF or MUMmer
-coordinate rows and writes PDF/PNG with base R only. It rejects existing outputs
+`biohub r list` shows R-backed commands. `dotplot` accepts PAF or MUMmer
+coordinates. `psmc-plot` accepts merged `Sample/Time/Ne` trajectories and optional
+explicit stage intervals. Both write PDF/PNG with base R and reject existing output
 unless `--force` is supplied.
 
 ## Development
@@ -88,11 +120,16 @@ cd biohub-rs
 cargo fmt --check
 cargo clippy --locked -- -D warnings
 cargo test --locked
+cd ..
+python3 tools/validate_recipes.py
+python3 -m unittest discover -s tools/tests -v
+python3 tools/snakemake_smoke.py
 ```
 
 See the [Chinese functional manual](docs/USER_GUIDE.zh-CN.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md),
-[CITATION.cff](CITATION.cff), and [AI usage disclosure](docs/AI_USAGE.md).
+[CITATION.cff](CITATION.cff), [migration ledger](docs/SCRIPT_MIGRATION.md), and
+[AI usage disclosure](docs/AI_USAGE.md).
 
 ## License and third-party code
 

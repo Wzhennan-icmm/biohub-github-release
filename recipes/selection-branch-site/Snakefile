@@ -1,0 +1,145 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+SOURCE_MANIFEST = str(Path(config["tests_manifest"]).expanduser().resolve())
+with open(SOURCE_MANIFEST, newline="", encoding="utf-8") as handle:
+    SOURCE_ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required_columns = {"test_id", "alignment", "marked_tree", "foreground"}
+if not SOURCE_ROWS or not required_columns.issubset(SOURCE_ROWS[0]):
+    raise ValueError(f"tests_manifest must contain {sorted(required_columns)}")
+TESTS = [row["test_id"] for row in SOURCE_ROWS]
+if len(TESTS) != len(set(TESTS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in TESTS):
+    raise ValueError("test_id values must be unique safe identifiers")
+TEST_MAP = {row["test_id"]: row for row in SOURCE_ROWS}
+MODELS = ["alternative", "null"]
+
+
+rule all:
+    input:
+        "results/branch_site_lrt.tsv",
+        "results/beb_sites.tsv",
+        "results/summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/selection-branch-site.tar.gz",
+
+
+rule validate_manifest:
+    input:
+        SOURCE_MANIFEST,
+    output:
+        manifest="results/tests.normalized.tsv",
+        summary="results/input_summary.tsv",
+        validation="logs/input_validation.log",
+    params:
+        script=str(BASE / "manifest.py"),
+        expected=int(config["expected_taxa"]),
+    shell:
+        r"""
+        python3 {params.script:q} --input {input:q} --expected-taxa {params.expected} \
+          --output {output.manifest:q} --summary {output.summary:q} \
+          --log {output.validation:q}
+        """
+
+
+rule codeml:
+    input:
+        manifest="results/tests.normalized.tsv",
+        alignment=lambda wildcards: str(Path(TEST_MAP[wildcards.test_id]["alignment"]).expanduser().resolve()),
+        tree=lambda wildcards: str(Path(TEST_MAP[wildcards.test_id]["marked_tree"]).expanduser().resolve()),
+    output:
+        directory("results/runs/{test_id}/{model}"),
+    log:
+        "logs/{test_id}.{model}.log",
+    params:
+        script=str(BASE / "run_codeml.py"),
+        executable=config["codeml_executable"],
+        codon_frequency=int(config["codon_frequency"]),
+        kappa=float(config["initial_kappa"]),
+        omega=float(config["alternative_initial_omega"]),
+        clean=int(config["clean_data"]),
+        method=int(config["optimizer_method"]),
+    shell:
+        r"""
+        python3 {params.script:q} --executable {params.executable:q} \
+          --alignment {input.alignment:q} --tree {input.tree:q} --model {wildcards.model:q} \
+          --codon-frequency {params.codon_frequency} --initial-kappa {params.kappa} \
+          --alternative-initial-omega {params.omega} --clean-data {params.clean} \
+          --optimizer-method {params.method} --output {output:q} --log {log:q}
+        """
+
+
+rule summarize:
+    input:
+        manifest="results/tests.normalized.tsv",
+        runs=expand("results/runs/{test_id}/{model}", test_id=TESTS, model=MODELS),
+    output:
+        lrt="results/branch_site_lrt.tsv",
+        beb="results/beb_sites.tsv",
+        summary="results/summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        runs="results/runs",
+        thresholds=" ".join(f"--beb-threshold {value}" for value in config["beb_thresholds"]),
+    shell:
+        r"""
+        python3 {params.script:q} --manifest {input.manifest:q} --runs {params.runs:q} \
+          {params.thresholds} --lrt {output.lrt:q} --beb {output.beb:q} \
+          --summary {output.summary:q} --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        SOURCE_MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("tests_manifest", input[0])]
+        for row in SOURCE_ROWS:
+            items.append((f"alignment/{row['test_id']}", row["alignment"]))
+            items.append((f"marked_tree/{row['test_id']}", row["marked_tree"]))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "selection-branch-site",
+            "Paired PAML branch-site Model A alternative/null tests with global BH correction.",
+            [
+                "Every test supplies one codon alignment and one tree containing exactly one #1 foreground marker.",
+                "LRT p-values use the 50:50 mixture distribution.",
+                "BH correction covers all tests in tests_manifest.",
+                "BEB sites are parsed only from alternative-model output and thresholds remain separate.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/branch_site_lrt.tsv",
+        "results/beb_sites.tsv",
+        "results/summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/selection-branch-site.tar.gz",
+    shell:
+        "tar -czf {output:q} results logs inputs.manifest.tsv"

@@ -1,5 +1,6 @@
 #id	source	description	status	note
 dotplot	r/dotplot.R	Generate static alignment dot plot from PAF or MUMmer coords	implemented	Base R backend; PDF/PNG output selected by extension
+psmc-plot	Psmc-ggplot2.R	Plot merged PSMC demographic trajectories	implemented	Parameterized base R rewrite; optional explicit stage intervals; no hard-coded geological annotations
 change-scaffolds-name	run_change_scaffolds_name.py	Replace first field IDs from mapping file	implemented	No external dependencies
 change-scaffolds-name-fasta	run_change_scaffolds_name_fasta.py	Rename FASTA headers with mapping table	implemented	No external dependencies
 change-seqname-for-fasta	run_change_seqName_for_fasta.py	Rename headers in all *.aln files under directory	implemented	No external dependencies
@@ -7,6 +8,7 @@ convert-3line2one	run_convert_3line2one_for_SV_depth.py	Convert 3-line depth row
 filter-seq-by-length	run_filter_seq_by_length.py	Keep FASTA records above length threshold	implemented	Fixed threshold bug in original
 filter-gff-by-id	run_filter_gff_by_ID.py	Filter GFF rows by ID list	implemented	Stable parsing
 filter-gtf-ctg	run_filter_gtf_ctg.py	Filter GTF/GFF rows by contig list	implemented	Stable parsing
+filter-gff-by-fasta	filter_gff_by_fasta.awk	Remove out-of-bounds GFF3 models using FASTA index lengths	implemented	Accepts .fai or two-column lengths; invalid parent models propagate to descendants
 merge-two-txt	run_merge_two_txt.py	Deduplicate rows, keep row with largest third column	implemented	No external dependencies
 compare-two-blast	run_compare_two_blastFile.py	Reciprocal BLAST pair filter	implemented	No external dependencies
 get-best-idy	run_get_best_idy_for_blast.py	Best identity per query from BLAST6	implemented	No external dependencies
@@ -37,7 +39,8 @@ get-best-hit-for-scan	run_get_best_hit_from_blast.py	Compatibility alias	impleme
 extract-gene-family-info	run_extract_gene_family_info.py	Expression split by family/length	implemented	Rust rewrite with family full/partial outputs
 extract-gene-family-matrix	run_extract_gene_family_matrix.py	Expression matrix per family	implemented	Rust rewrite with coverage-based parent/child sums
 extract-gene-family-info-alt	run_extract_longest_pep_from_ensembl_download.py	Alt alias	implemented	See extract-longest-pep
-orthofiner-to-pal2nal	run_orthofiner_to_pal2nal.py	Build validated PAL2NAL codon alignments	implemented	Checks CDS completeness/frame and writes validation_summary.tsv; uses MAFFT and PAL2NAL -nogap
+orthofinder-to-pal2nal	run_orthofiner_to_pal2nal.py	Build validated PAL2NAL codon alignments	implemented	Correctly spelled canonical command; checks CDS completeness/frame and writes validation_summary.tsv
+orthofiner-to-pal2nal	run_orthofiner_to_pal2nal.py	Build validated PAL2NAL codon alignments	implemented	Compatibility alias for orthofinder-to-pal2nal through v1.x
 convert-gene-annotation-contigs2chr	run_convert_gene_annotation_contigs2Chr_PASA.py	Alias	implemented	Alias to convert-gene-annotation-contigs2chr-PASA
 merge-two-end-bam	run_merge_two_end_bam.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join
 merge-two-end-bam1	run_merge_two_end_bam1.py	Pair-end BAM merge by read_name	implemented	Rust rewrite using samtools stream join

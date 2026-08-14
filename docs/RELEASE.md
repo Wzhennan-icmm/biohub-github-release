@@ -7,3 +7,6 @@
 5. Archive tagged release with Zenodo and add generated DOI to `CITATION.cff`.
 6. Record known limitations, external dependency versions, and tested platforms.
 7. For JOSS: verify public-history timing, paper metadata, impact citations, and AI disclosure.
+8. Run `python3 tools/validate_recipes.py --require-r`; verify every recipe path is packaged.
+9. For domain images, record immutable image digest and exact environment export; never publish a mutable-only tag.
+10. Run recipe helper regressions, all 13 DAG dry-runs, and four synthetic safe executions; archive logs.

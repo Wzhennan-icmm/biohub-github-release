@@ -1,0 +1,13 @@
+# feature_table: first column feature_id, remaining columns sample IDs.
+# metadata_tsv: sample_id plus constraint and condition columns.
+feature_table: REQUIRED
+metadata_tsv: REQUIRED
+constraints: []
+condition_covariates: []
+transform: hellinger
+minimum_prevalence: null
+minimum_total_abundance: null
+drop_incomplete_samples: false
+permutations: null
+random_seed: null
+scaling: null

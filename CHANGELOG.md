@@ -2,7 +2,31 @@
 
 All notable changes follow [Semantic Versioning](https://semver.org/).
 
-## 0.3.0 - Unreleased
+## 0.4.0 - Unreleased
+
+- Add 13 schema-validated Snakemake recipe packs for comparative genomics,
+  assembly, population genomics, de novo mutation rates, RNA-seq, enrichment,
+  and microbiome RDA.
+- Add `biohub recipe list|describe|init|validate|run|report`, local/Slurm profiles,
+  config-hash resume protection, run state, provenance, checksums, and archives.
+- Unify command and recipe discovery in catalog JSON with kind, domain, version,
+  dependency, container, and license metadata.
+- Add recipe-specific dependency preflight, including R package checks.
+- Add canonical `orthofinder-to-pal2nal` ID while retaining misspelled alias.
+- Integrate FASTA-length-aware GFF3 filtering with model propagation.
+- Add parameterized base-R PSMC trajectory plotting without hard-coded stages.
+- Add sanitized 91-item script migration ledger and private inventory tool.
+- Package recipes in native archives and core container; add static recipe CI.
+- Correct assembly coverage denominators to include unaligned FASTA records; add
+  strict PAF length/coordinate checks.
+- Add regression coverage for SyRI annotation columns, whitespace-delimited
+  MCMCTree chains, PLINK2 hybrid results, and windowed nucleotide diversity.
+- Expand run provenance with declared dependency versions, workflow checksum,
+  container digest hook, stable bundle checksums, and managed-path collision checks.
+- Build five pinned domain images, preflight every included recipe dependency,
+  and execute four synthetic low-risk workflows in image CI.
+
+## 0.3.0 - Development snapshot
 
 - Add stable `catalog`, `run`, and `doctor` command surfaces.
 - Add JSON command catalog metadata and external-dependency preflight.
@@ -16,7 +40,7 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
 - Parse whitespace- and pipe-delimited MUMmer coordinate tables.
 - Reject release tags that do not match Cargo package version.
 - Add process-level CLI tests for help exit codes, JSON catalog metadata, and unknown commands.
-- Add a comprehensive Chinese functional manual covering all 54 catalog commands.
+- Add a comprehensive Chinese functional manual covering the command catalog.
 - Add and exercise a synthetic MUMmer coords dotplot fixture.
 
 ## 0.2.1

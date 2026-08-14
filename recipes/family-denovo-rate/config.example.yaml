@@ -1,0 +1,8 @@
+# pairs_manifest columns: family_id, pair_id, candidates_tsv, callable_bed
+# candidate files need: chrom, position, ref, alt, tier, evidence_class
+pairs_manifest: REQUIRED
+included_tiers: []
+included_evidence_classes: [candidate]
+ploidy: null
+confidence_level: null
+require_all_candidates_callable: true

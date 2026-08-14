@@ -1,0 +1,125 @@
+from pathlib import Path
+import subprocess
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+FEATURES = str(Path(config["feature_table"]).expanduser().resolve())
+METADATA = str(Path(config["metadata_tsv"]).expanduser().resolve())
+
+
+rule all:
+    input:
+        "results/model_summary.tsv",
+        "results/features_audit.tsv",
+        "results/permutation_overall.tsv",
+        "results/permutation_terms.tsv",
+        "results/permutation_axes.tsv",
+        "results/site_scores.tsv",
+        "results/feature_scores.tsv",
+        "results/biplot_scores.tsv",
+        "results/README.txt",
+        "report/rda.pdf",
+        "logs/rda.log",
+        "inputs.manifest.tsv",
+        "report/microbiome-rda.tar.gz",
+
+
+rule rda:
+    input:
+        features=FEATURES,
+        metadata=METADATA,
+    output:
+        model="results/model_summary.tsv",
+        features="results/features_audit.tsv",
+        overall="results/permutation_overall.tsv",
+        terms="results/permutation_terms.tsv",
+        axes="results/permutation_axes.tsv",
+        sites="results/site_scores.tsv",
+        species="results/feature_scores.tsv",
+        biplot="results/biplot_scores.tsv",
+        plot="report/rda.pdf",
+        log="logs/rda.log",
+    params:
+        script=str(BASE / "run_rda.R"),
+    run:
+        subprocess.run(
+            [
+                "Rscript", params.script,
+                "--features", input.features,
+                "--metadata", input.metadata,
+                "--constraints", ",".join(config["constraints"]),
+                "--conditions", ",".join(config["condition_covariates"]),
+                "--transform", str(config["transform"]),
+                "--minimum-prevalence", str(config["minimum_prevalence"]),
+                "--minimum-total-abundance", str(config["minimum_total_abundance"]),
+                "--drop-incomplete-samples", str(bool(config["drop_incomplete_samples"])).lower(),
+                "--permutations", str(config["permutations"]),
+                "--random-seed", str(config["random_seed"]),
+                "--scaling", str(config["scaling"]),
+                "--model-summary", output.model,
+                "--features-kept", output.features,
+                "--overall-test", output.overall,
+                "--term-tests", output.terms,
+                "--axis-tests", output.axes,
+                "--site-scores", output.sites,
+                "--feature-scores", output.species,
+                "--biplot-scores", output.biplot,
+                "--plot", output.plot,
+                "--log", output.log,
+            ],
+            check=True,
+        )
+
+
+rule input_manifest:
+    input:
+        FEATURES,
+        METADATA,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        write_input_manifest([("feature_table", input[0]), ("metadata_tsv", input[1])], output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "microbiome-rda",
+            "Constrained community ordination with explicit transformations, covariates and permutation tests.",
+            [
+                "Feature and metadata sample sets must match exactly.",
+                "Prevalence, abundance filtering and transformation are explicit.",
+                "Condition covariates become partial RDA Condition() terms.",
+                "Overall, term and constrained-axis permutation tests use recorded seed and permutation count.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/model_summary.tsv",
+        "results/features_audit.tsv",
+        "results/permutation_overall.tsv",
+        "results/permutation_terms.tsv",
+        "results/permutation_axes.tsv",
+        "results/site_scores.tsv",
+        "results/feature_scores.tsv",
+        "results/biplot_scores.tsv",
+        "results/README.txt",
+        "report/rda.pdf",
+        "logs/rda.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/microbiome-rda.tar.gz",
+    shell:
+        "tar -czf {output:q} {input:q}"

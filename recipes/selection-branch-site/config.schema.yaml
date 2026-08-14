@@ -1,0 +1,29 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - tests_manifest
+  - expected_taxa
+  - codeml_executable
+  - codon_frequency
+  - initial_kappa
+  - alternative_initial_omega
+  - clean_data
+  - optimizer_method
+  - beb_thresholds
+  - bh_family
+properties:
+  tests_manifest: {type: string, minLength: 1}
+  expected_taxa: {type: integer, minimum: 2}
+  codeml_executable: {type: string, minLength: 1}
+  codon_frequency: {type: integer, minimum: 0, maximum: 3}
+  initial_kappa: {type: number, exclusiveMinimum: 0}
+  alternative_initial_omega: {type: number, exclusiveMinimum: 0}
+  clean_data: {type: integer, enum: [0, 1]}
+  optimizer_method: {type: integer, enum: [0, 1]}
+  beb_thresholds:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: number, minimum: 0, maximum: 1}
+  bh_family: {type: string, const: all_manifest_tests}

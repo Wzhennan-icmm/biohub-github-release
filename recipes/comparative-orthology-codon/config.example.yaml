@@ -1,0 +1,5 @@
+# Replace every REQUIRED/null value before validation.
+protein_groups_dir: REQUIRED
+cds_fasta: REQUIRED
+expected_taxa: null
+biohub_executable: biohub

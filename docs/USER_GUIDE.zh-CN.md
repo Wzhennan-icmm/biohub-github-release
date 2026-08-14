@@ -1,28 +1,29 @@
-# BioHub v0.3 功能说明书
+# BioHub v0.4 功能说明书
 
-> 文档版本：0.3.0<br>
-> 最后更新：2026-08-12<br>
+> 文档版本：0.4.0<br>
+> 最后更新：2026-08-14<br>
 > 适用对象：植物基因组组装、注释、比较基因组、群体分析和表达分析流程的使用者与维护者
 
-BioHub 把历史上分散的 Python、R、AWK 和 shell 工具整合为单一命令行程序。核心数据处理由 Rust 实现；绘图及需要第三方程序的流程通过明确的后端契约调用 Rscript、samtools、MAFFT 或 PAL2NAL。本说明书描述当前 `0.3.0` 代码的真实接口、输入输出、依赖、限制和验证状态。
+BioHub 把历史上分散的 Python、R、AWK 和 shell 工具整合为单一命令行程序。核心数据处理由 Rust 实现；绘图和科研流程通过明确后端契约调用 Rscript、Snakemake 及领域软件。本说明书描述当前 `0.4.0` 代码的真实接口、输入输出、依赖、限制和验证状态。
 
 重要：目录中的 `implemented` 表示脚本 ID 已有可调用实现，不等于算法已在所有物种、文件变体和历史数据上完成科研等价性验证。发表或生产使用前，应使用本项目夹具、自己的去标识化代表数据和经领域专家批准的 golden output 复核结果。
 
-阅读导航：先看[安装与启动](#2-安装与启动)和[命令模型](#3-命令模型)；按场景上手可看[快速教程](#4-快速教程)；查参数与边界看[54 个目录命令](#6-54-个目录命令)和[直接命令组](#7-直接命令组)；发表前检查[验证状态](#8-验证状态)与[可重复性、数据安全与引用](#10-可重复性数据安全与引用)。GitHub 页面右侧大纲可直接定位具体命令 ID。
+阅读导航：先看[安装与启动](#2-安装与启动)和[命令模型](#3-命令模型)；按场景上手可看[快速教程](#4-快速教程)；查参数与边界看[57 个目录命令](#6-57-个目录命令)和[直接命令组](#7-直接命令组)；发表前检查[验证状态](#8-验证状态)与[可重复性、数据安全与引用](#10-可重复性数据安全与引用)。GitHub 页面右侧大纲可直接定位具体命令或 recipe ID。
 
 ## 1. 软件定位与功能边界
 
 BioHub 当前提供：
 
-- 54 个可通过目录发现的迁移脚本 ID；
+- 57 个可通过目录发现的迁移命令 ID；
+- 13 个带 schema、输入清单、日志、摘要和归档的 Snakemake recipe；
 - FASTA、GFF/GTF、BLAST6、VCF、BAM、PAF、MUMmer coords、表达矩阵等常见文本或二进制生物信息格式处理；
 - 最长转录本、注释格式转换、互惠最佳命中、四倍简并位点、深度图和点阵图等工作流；
-- 机器可读 JSON 命令目录、外部依赖预检、容器构建和跨平台 CI；
+- 统一机器可读 JSON 目录、按 recipe 外部依赖预检、容器构建和跨平台 CI；
 - 旧命令入口兼容层，便于历史流程逐步迁移。
 
 BioHub 当前不提供：
 
-- 工作流调度、集群作业提交或样本元数据管理；
+- 自动推断集群账户、分区、内存、运行时间或研究设计；
 - FASTA/GFF/VCF 的完整标准校验器；
 - `annotation-vcf` 中的密码子变化、氨基酸变化或变异致病性预测；
 - 对所有历史脚本的逐字节输出顺序保证；
@@ -51,13 +52,13 @@ cargo build --release --locked
 仓库根目录执行：
 
 ```bash
-docker build -t biohub:0.3.0 .
-docker run --rm biohub:0.3.0 --version
-docker run --rm biohub:0.3.0 catalog --format json
-docker run --rm -v "$PWD:/work" -w /work biohub:0.3.0 doctor
+docker build -t biohub:0.4.0 .
+docker run --rm biohub:0.4.0 --version
+docker run --rm biohub:0.4.0 catalog --format json
+docker run --rm -v "$PWD:/work" -w /work biohub:0.4.0 doctor
 ```
 
-容器包含 Rscript、samtools、MAFFT 和 `pal2nal.pl`。处理本地文件时必须挂载目录；容器退出后，仅挂载目录内的输出会保留。
+核心容器包含 Rscript、samtools、MAFFT、`pal2nal.pl`、recipe 定义和示例，但不宣称包含全部领域软件。运行 recipe 应使用目录记录的领域镜像或经过锁定的本地环境。处理本地文件时必须挂载目录；容器退出后，仅挂载目录内的输出会保留。
 
 ### 2.3 外部依赖
 
@@ -66,9 +67,13 @@ docker run --rm -v "$PWD:/work" -w /work biohub:0.3.0 doctor
 | Rust/Cargo | 源码构建 | 仅源码安装必需 |
 | Rscript | `dotplot` | 按命令必需 |
 | samtools | 3 个双端 BAM 合并命令 | 按命令必需 |
-| mafft | `orthofiner-to-pal2nal` | 按命令必需 |
-| pal2nal.pl | `orthofiner-to-pal2nal` | 按命令必需 |
+| mafft | `orthofinder-to-pal2nal` | 按命令必需 |
+| pal2nal.pl | `orthofinder-to-pal2nal` | 按命令必需 |
 | hamstr | 预留适配器 | 可选；当前目录命令不直接调用 |
+| Snakemake | 13 个 recipe | recipe 必需 |
+| Python 3 | recipe 校验、汇总和 provenance 辅助脚本 | recipe 必需 |
+| cafe5、codeml、mcmctree、minimap2、syri、plink2、vcftools、Python 2 | 对应比较/群体 recipe | 按 recipe 必需 |
+| DESeq2、vegan | RNA-seq、RDA recipe | 按 recipe 必需 |
 
 运行预检：
 
@@ -76,6 +81,7 @@ docker run --rm -v "$PWD:/work" -w /work biohub:0.3.0 doctor
 biohub doctor
 biohub doctor --json
 biohub doctor --strict
+biohub doctor --recipe selection-branch-site
 ```
 
 普通模式报告缺失项但可返回成功；`--strict` 在任何检查项缺失时返回非零，适合 CI。`--json` 便于流程解析。
@@ -85,9 +91,10 @@ biohub doctor --strict
 ### 3.1 推荐入口
 
 ```text
-biohub catalog [--format table|json]
+biohub catalog [--format table|json] [--kind all|command|recipe]
 biohub run <script-id> [options] [--force]
-biohub doctor [--strict] [--json]
+biohub doctor [--strict] [--json] [--recipe <recipe-id>]
+biohub recipe list|describe|init|validate|run|report
 biohub r list
 biohub r run dotplot ...
 ```
@@ -100,7 +107,7 @@ biohub catalog --format json
 biohub run annotation-vcf --help
 ```
 
-JSON 目录每项包含 `id`、历史来源、描述、迁移状态、类别、后端和外部依赖。`biohub run <id> --help` 当前显示元数据，不展开全部参数；参数以本说明书和实际调用错误信息为准。
+JSON 目录每项包含 `id`、`kind`、领域、描述、状态、后端、依赖、版本和许可证；recipe 还含工作流、schema 和容器。用 `--kind command` 或 `--kind recipe` 过滤。`biohub run <id> --help` 当前显示元数据，不展开全部参数；参数以本说明书和实际调用错误信息为准。
 
 ### 3.2 兼容入口
 
@@ -130,7 +137,7 @@ biohub scripts run <script-id> ...
 | `1` | 输入、解析、I/O、外部程序、未知命令或科研前置验证失败 |
 | `2` | 部分命令的用法或参数枚举错误 |
 
-批处理必须检查返回码和标准错误，不能仅检查输出文件是否存在。`orthofiner-to-pal2nal` 可能产生部分结果后因某一 orthogroup 失败而整体返回非零。
+批处理必须检查返回码和标准错误，不能仅检查输出文件是否存在。`orthofinder-to-pal2nal` 可能产生部分结果后因某一 orthogroup 失败而整体返回非零。
 
 ## 4. 快速教程
 
@@ -269,7 +276,7 @@ JSON 模式会创建 JSON 文件；部分扩展名组合会同时创建 TSV/文�
 
 ```bash
 biohub doctor --strict
-biohub run orthofiner-to-pal2nal \
+biohub run orthofinder-to-pal2nal \
   --pathOfprot orthogroup_proteins/ \
   --outPutPath codon_alignments/ \
   --nuclOfcds all.cds.fa
@@ -284,6 +291,76 @@ BioHub 在调用外部程序前检查：
 
 每组成功时输出蛋白比对、`*.cds.fasta` 和 `*.codon.paml`。目录还包含 `validation_summary.tsv` 与 `README.txt`。MAFFT 参数固定为 `--maxiterate 1000 --localpair`；PAL2NAL 参数固定为 `-output paml -nogap`。任一组跳过或失败时命令返回非零；保留诊断表和已完成组。推荐每次使用空输出目录。
 
+### 4.7 Recipe 科研工作流
+
+Recipe 把多步分析固定为可检查的 Snakemake DAG。模板中的 `REQUIRED` 和
+`null` 是待填写占位符，不是默认科研阈值。先复制模板，再填写项目路径、
+样本/物种清单、阈值、重复次数、随机种子和资源参数：
+
+```bash
+biohub recipe list
+biohub recipe describe selection-branch-site
+biohub recipe init selection-branch-site --workdir analysis-config
+# 编辑 analysis-config/config.yaml
+biohub doctor --recipe selection-branch-site --strict
+biohub recipe validate selection-branch-site \
+  --config analysis-config/config.yaml
+biohub recipe run selection-branch-site \
+  --config analysis-config/config.yaml \
+  --workdir runs/selection-20260814 --cores 8
+biohub recipe report --workdir runs/selection-20260814
+```
+
+默认 `local` profile。Slurm 使用：
+
+```bash
+biohub recipe run <recipe-id> --config config.yaml --workdir run-dir \
+  --profile slurm --cores 8
+```
+
+内置 Slurm profile 依赖 Snakemake 8.6+ 与
+`snakemake-executor-plugin-slurm`，为安全起见默认只提交一个作业。生产运行前
+复制 profile，填写集群批准的并发数、账户、分区、内存和运行时间。也可把
+自定义 profile 目录传给 `--profile`。
+
+每个 run 目录至少包含：
+
+- `config.resolved.yaml`、`config.sha256`、`recipe.id` 和 `command.sh`；
+- `run.json`、`provenance.json`、`versions.tsv`、`recipe.sources.sha256` 和 `inputs.manifest.tsv`；
+- `logs/`、`results/`、`report/`、压缩归档及成功运行后的 `checksums.sha256`。
+
+现有 run 目录默认拒绝覆盖。`--resume` 仅允许 recipe ID 和配置 SHA256 与原运行
+一致；修改配置必须新建 run 目录。失败状态写入 `run.json`，修复原因后可用原配置
+恢复。`validate` 执行 Snakemake dry-run，只检查 DAG/输入和 schema，不代替领域
+结果验证。`recipe report` 已存在 `report/report.html` 时同样拒绝覆盖；确认替换后传
+`--force`。
+
+`versions.tsv` 对目录声明的每项依赖记录版本、不可用状态，或“已安装但无安全版本
+探针”；不会通过启动 codeml/MCMCTree 等交互程序猜测版本。`provenance.json` 记录
+workflow SHA256 与推荐容器；容器运行时应设置 `BIOHUB_CONTAINER_DIGEST`。成功后的
+`recipe.sources.sha256` 覆盖 recipe 内工作流、schema、脚本及共享 provenance helper；
+`checksums.sha256` 覆盖稳定 run 文件，故意排除后续状态可能变化的 `run.json`。
+
+| Recipe ID | 主要输入与检查 | 核心产物 | 领域依赖 |
+| --- | --- | --- | --- |
+| `comparative-orthology-codon` | orthogroup 蛋白目录、CDS FASTA、预期 taxa；检查 ID、数量和 CDS 三联体 | 蛋白/CDS/无 gap PAML 密码子比对、验证汇总 | MAFFT、PAL2NAL |
+| `gene-family-cafe` | gene count、Newick 树；检查 taxa 一致、二叉树、分支长度、超度量容差和 family 过滤 | 重复 CAFE 运行、似然/参数稳定性选择、扩张收缩表 | CAFE5 |
+| `selection-branch-site` | test manifest、PAML 比对、仅含一个 `#1` 的前景树 | 配对 Model A/null、LRT、50:50 混合卡方 p、全局 BH、BEB 位点 | codeml |
+| `dating-mcmctree` | replicate manifest、stage1/stage2 ctl；检查 `ndata` 和 `usedata=3→2` | 隔离重复、节点后验摘要、分位数和 ESS | mcmctree |
+| `assembly-t2t-evaluate` | assembly manifest、参考 FASTA；显式预期染色体和端粒 motif 参数 | N50/N/长度审计、端粒末端证据、PAF 覆盖/identity | minimap2 |
+| `synteny-sv` | 成对 assembly manifest；可要求序列 ID 集一致 | 原始/过滤 PAF、SyRI 结果、SV 类型汇总 | minimap2、SyRI |
+| `population-gwas` | VCF/PGEN/BED、trait manifest、可选 covariate；检查样本覆盖 | 每 trait PLINK2 结果、状态与机械最小 p 汇总 | PLINK2 |
+| `population-selection` | VCF、两群体比较 manifest；检查样本存在且集合不相交 | windowed Weir FST、各群体 nucleotide diversity 汇总、候选窗口 | VCFtools |
+| `kmer-gwas` | trait manifest、预制 k-mer table prefix、显式 legacy 脚本路径 | 每 trait 关联结果、显著行和候选 k-mer FASTA | Python 2、外部 k-mer GWAS 脚本 |
+| `family-denovo-rate` | family/pair manifest、candidate TSV、callable BED；检查坐标和 callable 覆盖 | candidate 审计、pair/combined rate、Garwood exact Poisson CI | Python 3 标准库 |
+| `rnaseq-deseq2` | 原始整数 count、sample design、contrast manifest；检查样本集合和设计满秩 | normalized counts、全量差异表、contrast 汇总、PCA | R、DESeq2 |
+| `functional-enrichment` | foreground set、background、显式 term association/source | 单侧超几何检验、按配置范围 BH、覆盖审计和图 | base R |
+| `microbiome-rda` | feature table、metadata、constraint/Condition 列；检查样本和缺失值 | 过滤审计、RDA scores、overall/term/axis permutation tests | R、vegan |
+
+这些 recipe 当前状态为 `experimental`。统计参数可复现，不表示数据设计、校准点、
+前景分支、群体定义、候选阈值或因果解释已获领域批准。发表前必须用去标识化代表
+数据、独立工具输出和专家批准的 golden result 核对。
+
 ## 5. 全量命令参考阅读方法
 
 本节每项采用相同字段：
@@ -295,7 +372,7 @@ BioHub 在调用外部程序前检查：
 
 所有条目均可由 `biohub catalog --format json` 发现。未显式写外部依赖的条目使用 Rust 标准实现。
 
-## 6. 54 个目录命令
+## 6. 57 个目录命令
 
 ### 6.1 可视化
 
@@ -305,6 +382,13 @@ BioHub 在调用外部程序前检查：
 - **调用**：`biohub run dotplot --input <align.paf|coords> --output <plot.pdf|png> [--format paf|coords] [--force]`
 - **输入/输出**：PAF 至少 9 列；coords 每个有效行至少能解析 4 个数值。输出扩展名决定 PDF 或 PNG。
 - **依赖/注意**：依赖 Rscript，仅使用 base R。空输入、无可解析行、非法格式或非 PDF/PNG 输出失败。PAF 支持正反向着色；coords 当前不解析方向。
+
+### `psmc-plot`
+
+- **用途**：把 `biohub psmc merge` 生成的多个样本轨迹绘制为静态 PSMC 人口史图。
+- **调用**：`biohub run psmc-plot --input <merged.tsv> --output <plot.pdf|png> [--x-scale linear|log10] [--y-scale linear|log10] [--stages stages.tsv] [--force]`
+- **输入/输出**：主表必需列为 `Sample Time Ne`。可选 stages 表必需列为 `label start end color`；区间只做背景注释。输出扩展名决定 PDF/PNG。
+- **依赖/注意**：依赖 Rscript，仅使用 base R；两个坐标轴默认 `log10`。log10 模式要求正值。旧脚本中的地质年代、颜色和坐标范围已移除；不会自动解释人口史事件。
 
 ### `plot-depth-pandepth`
 
@@ -552,6 +636,13 @@ BioHub 在调用外部程序前检查：
 - **输入/输出**：排除列表每行一个完整 contig 名；匹配输入第一列即删除，其余行原样输出。
 - **依赖/注意**：输出必需；注释行若第一列不在排除列表会保留。比较区分大小写。
 
+### `filter-gff-by-fasta`
+
+- **用途**：使用 FASTA `.fai` 或二列长度表删除越过序列边界的 GFF3 feature，并传播失效模型。
+- **调用**：`biohub run filter-gff-by-fasta --gff <input.gff3> --fai <reference.fa.fai> [-o <filtered.gff3>]`
+- **输入/输出**：长度文件前两列为 sequence ID、正整数长度。合法 GFF3 必须 9 列；注释、空行和非 9 列原样保留。输出统计写 stderr。
+- **依赖/注意**：未知 sequence、`start=0`、`end<start` 或 `end>length` 视为失效。越界 gene/transcript 的子记录删除；越界 exon/CDS 会使其 Parent transcript 及后代失效。多 Parent 任一失效时保守删除整条记录。数值格式错误直接失败。
+
 ### `extract-pasa-results`
 
 - **用途**：从 PASA 风格结果中提取 `#PROT` 蛋白和每个 gene 内记录数最多的 mRNA 块。
@@ -663,12 +754,18 @@ BioHub 在调用外部程序前检查：
 
 ### 6.8 密码子比对与四倍简并位点
 
-### `orthofiner-to-pal2nal`
+### `orthofinder-to-pal2nal`
 
 - **用途**：验证蛋白/CDS 对应关系，运行 MAFFT 蛋白比对，再用 PAL2NAL 生成密码子比对。
-- **调用**：`biohub run orthofiner-to-pal2nal -p <protein-groups-dir> -o <out-dir> -n <all.cds.fa>`
+- **调用**：`biohub run orthofinder-to-pal2nal -p <protein-groups-dir> -o <out-dir> -n <all.cds.fa>`
 - **输入/输出**：每个非隐藏普通文件作为一个蛋白组；输出 `validation_summary.tsv`、`README.txt` 和每组的蛋白比对、CDS FASTA、PAML 密码子比对。
 - **依赖/注意**：依赖 mafft、`pal2nal.pl`。CDS ID 必须唯一、存在、非空且长度为 3 的倍数；任何组失败或跳过使整体返回非零。Migut ID 有专用前三段映射兼容规则。
+
+### `orthofiner-to-pal2nal`
+
+- **用途**：`orthofinder-to-pal2nal` 的历史拼写兼容入口。
+- **调用**：参数、输出和失败行为与规范命令完全相同。
+- **兼容期**：保留到 v1.x；新脚本应使用正确拼写。
 
 ### `get-diff-sites-from-orthology`
 
@@ -693,7 +790,7 @@ BioHub 在调用外部程序前检查：
 
 ## 7. 直接命令组
 
-这些入口早于统一目录，仍用于稳定夹具和历史工作流。它们不全部显示在 54 个脚本目录中。
+这些入口早于统一目录，仍用于稳定夹具和历史工作流。它们不全部显示在 57 个命令目录中。
 
 ### 7.1 `rename`
 
@@ -769,6 +866,10 @@ biohub psmc merge -d <input-dir> [-p <suffix>] [-o <merged.tsv>]
 - `annotation-vcf` 的 TSV、JSON、边界位置和变异类型；
 - 本说明书对目录中全部脚本 ID 的章节覆盖；
 - PAF 和 MUMmer coords 点阵图合成数据 smoke test（需 Rscript 环境）。
+- 13 个 recipe 的 schema、目录契约、Python/R 语法和 Snakemake DAG dry-run；
+- family de novo、功能富集、microbiome RDA、DESeq2 四个低风险 recipe 的合成数据实跑；
+- 装配覆盖率完整分母、SyRI 第 11 列类型、MCMCTree 空白分隔 chain、PLINK2 hybrid
+  结果与群体 pi 汇总的回归测试。
 
 ### 8.2 尚需真实数据验证的范围
 
@@ -810,7 +911,7 @@ biohub run dotplot --input align.paf --output plot.pdf --force
 export BIOHUB_R_DIR=/path/to/biohub/r
 ```
 
-该目录必须包含 `dotplot.R`。
+该目录必须包含 `dotplot.R` 和 `psmc_plot.R`。
 
 ### 9.3 `missing external dependency`
 
@@ -843,6 +944,7 @@ biohub catalog --format json
 ## 11. 维护者文档
 
 - `docs/COMMANDS.md`：命令支持等级与晋级规则；
+- `docs/SCRIPT_MIGRATION.md` 与矩阵：91 项脚本审计决策、验证状态和延期原因；
 - `docs/RELEASE.md`：发布检查清单；
 - `r/README.md`：R 后端契约；
 - `CONTRIBUTING.md`：贡献与测试要求；

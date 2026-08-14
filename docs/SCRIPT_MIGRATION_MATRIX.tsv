@@ -1,0 +1,92 @@
+inventory_id	source_artifact	language	decision	target	verification	note
+001	python-archive/FilterTxt/run_check_duplication_for_gene_pairs.py	python	integrated	command:check-duplication-gene-pairs	catalog+rust-tests	Symmetric pair deduplication rewrite
+002	python-archive/annotation_VCF_python3.py	python	integrated	command:annotation-vcf	unit+cli	TSV and JSON outputs; method limits documented
+003	python-archive/run_Extract_PASA_results.py	python	integrated	command:extract-pasa-results	catalog;golden-pending	Block-order compatibility retained
+004	python-archive/run_Merge_fpkm_file.py	python	integrated	command:merge-fpkm-file	catalog;golden-pending	Parameterized directory input
+005	python-archive/run_Save_yuanyaowu_go.py	python	integrated	command:save-go	catalog;golden-pending	GO line extraction
+006	python-archive/run_Zhouxiaoxuan_mergeXLS.py	python	integrated	command:zhouxiaoxuan-mergexls	catalog;golden-pending	Historical key normalization
+007	python-archive/run_change_scaffolds_name.py	python	integrated	command:change-scaffolds-name	unit+catalog	Mapping direction documented
+008	python-archive/run_change_scaffolds_name_fasta.py	python	integrated	command:change-scaffolds-name-fasta	catalog;golden-pending	Mapped-record selection retained
+009	python-archive/run_change_seqName_for_fasta.py	python	integrated	command:change-seqname-for-fasta	catalog;golden-pending	Batch .aln migration
+010	python-archive/run_compare_AS_and_noAS_results.py	python	integrated	command:compare-as-and-noAS	catalog;golden-pending	Historical filtering behavior
+011	python-archive/run_compare_busco_results.py	python	integrated	command:compare-busco-results	catalog;golden-pending	Species-pair comparison
+012	python-archive/run_compare_two_blastFile.py	python	integrated	command:compare-two-blast	catalog;golden-pending	Reciprocal pair filtering
+013	python-archive/run_convert_3line2one_for_SV_depth.py	python	integrated	command:convert-3line2one	catalog;golden-pending	Three-row depth conversion
+014	python-archive/run_convert_GeMoMa_gff_to_gff3.py	python	integrated	command:convert-gemoma-gff3	catalog;domain-review-pending	Generated GFF3 semantics need domain golden
+015	python-archive/run_convert_gene_annotation_contigs2Chr_PASA.py	python	integrated	command:convert-gene-annotation-contigs2chr-PASA	catalog;domain-review-pending	Coordinate edge cases documented
+016	python-archive/run_convert_gene_annotation_scaffold2chr_NextGenomicsVersion.py	python	integrated	command:convert-gene-annotation-scaffold2chr-nextgenomics	catalog;domain-review-pending	Split-scaffold recovery retained
+017	python-archive/run_extract_gene_family_info.py	python	integrated	command:extract-gene-family-info	catalog;golden-pending	Family expression split
+018	python-archive/run_extract_gene_family_matrix.py	python	integrated	command:extract-gene-family-matrix	catalog;golden-pending	Coverage-based matrix
+019	python-archive/run_extract_longest_pep_from_ensembl_download.py	python	integrated	command:extract-longest-pep	catalog;golden-pending	Historical header rule explicit
+020	python-archive/run_filter_GeMoMa_AS.py	python	integrated	command:filter-gemoma-as	catalog;golden-pending	CDS length filter
+021	python-archive/run_filter_GeMoMa_AS_2.py	python	integrated	command:filter-gemoma-as2	catalog;golden-pending	Longest CDS isoform
+022	python-archive/run_filter_gff_by_ID.py	python	integrated	command:filter-gff-by-id	catalog;golden-pending	First attribute token behavior documented
+023	python-archive/run_filter_gtf_ctg.py	python	integrated	command:filter-gtf-ctg	catalog;golden-pending	Contig exclusion
+024	python-archive/run_filter_seq_by_length.py	python	integrated	command:filter-seq-by-length	catalog;golden-pending	Legacy threshold bug corrected
+025	python-archive/run_gamma_distribution.py	python	excluded	-	manual-review	Interactive statistics tutorial; not project data workflow
+026	python-archive/run_genome_gc.py	python	integrated	command:genome-gc	catalog;golden-pending	Whole-FASTA GC fraction
+027	python-archive/run_get_best_hit_based_on_idy.py	python	integrated	command:get-best-hit-based-on-idy	catalog;golden-pending	Score and identity rule retained
+028	python-archive/run_get_best_hit_by_score.py	python	integrated	command:get-best-hit-by-score	catalog;golden-pending	Two-way best score
+029	python-archive/run_get_best_hit_by_score_one_file.py	python	integrated	command:get-best-hit-by-score-one-file	catalog;golden-pending	Single-table reciprocal score
+030	python-archive/run_get_best_hit_from_blast.py	python	integrated	command:get-best-hit-from-blast	catalog;domain-review-pending	Historical count-based multi-species rule
+031	python-archive/run_get_best_hit_genes.py	python	integrated	command:get-best-hit-genes	catalog;golden-pending	Best/second-best e-values
+032	python-archive/run_get_best_idy_for_blast.py	python	integrated	command:get-best-idy	catalog;golden-pending	Best identity per query
+033	python-archive/run_get_diff_sites_from_orthology.py	python	integrated	command:get-diff-sites-from-orthology	catalog;domain-review-pending	Historical four-fold definition documented
+034	python-archive/run_get_four_degenerate_sites.py	python	integrated	command:get-four-degenerate-sites	catalog;domain-review-pending	Strict invariant-codon definition retained
+035	python-archive/run_get_longest_transcript.py	python	integrated	command:get-longest-transcript	unit+catalog	Dot-suffix grouping
+036	python-archive/run_get_the_longest_seq.py	python	integrated	command:get-the-longest-seq	catalog;golden-pending	Historical dot-field mapping
+037	python-archive/run_merge_Gos_nr_swissprot_Trembl_Blast2gos.py	python	integrated	command:merge-gos	catalog;golden-pending	GO merge with EC exclusion
+038	python-archive/run_merge_blastpBest_for_jcvi.py	python	integrated	command:merge-blastp-best-jcvi	catalog;golden-pending	JCVI-like matrix
+039	python-archive/run_merge_two_end_bam.py	python	integrated	command:merge-two-end-bam	catalog;external-fixture-pending	Samtools stream join
+040	python-archive/run_merge_two_end_bam1.py	python	integrated	command:merge-two-end-bam1	catalog;external-fixture-pending	Compatibility variant
+041	python-archive/run_merge_two_end_bam_forMGI.py	python	integrated	command:merge-two-end-bam-forMGI	catalog;external-fixture-pending	MGI compatibility variant
+042	python-archive/run_merge_two_txt.py	python	integrated	command:merge-two-txt	catalog;golden-pending	Maximum third-column deduplication
+043	python-archive/run_orthofiner_to_pal2nal.py	python	recipe	recipe:comparative-orthology-codon	unit+static;domain-golden-pending	Canonical spelling added; typo alias retained
+044	python-archive/run_orthogenes.py	python	integrated	command:orthogenes	catalog;golden-pending	Comma-list deduplication
+045	python-archive/run_plot_depth_for_Pandepth.py	python	integrated	command:plot-depth-pandepth	catalog;visual-golden-pending	SVG rewrite
+046	python-archive/run_plot_depth_for_Pandepth2.py	python	integrated	command:plot-depth-pandepth2	catalog;visual-golden-pending	Styled SVG rewrite
+047	python-archive/run_plot_depth_for_mosdepth_point.py	python	integrated	command:plot-mosdepth-point	catalog;visual-golden-pending	Cumulative coordinate SVG
+048	python-archive/run_trim_TTAGGG_for_fastq.py	python	integrated	command:trim-ttaggg-fastq	catalog;golden-pending	Forward/reverse motif rotations
+049	workspace/16sRDA.R	r	recipe	recipe:microbiome-rda	R-syntax+synthetic-execution;domain-golden-pending	Removed runtime installs and hard-coded variables
+050	workspace/16sRDA_more.R	r	recipe	recipe:microbiome-rda	R-syntax+synthetic-execution;domain-golden-pending	Parameterized Hellinger/partial RDA and permutation tests
+051	workspace/Chinese_map.R	r	deferred	-	manual-review	External map services, local shapefile, fonts and non-genomics scope
+052	workspace/Chromosome_plot.R	r	deferred	-	manual-review	Runtime installs and undefined project objects; needs explicit visualization contract
+053	workspace/Go_KEGG_enrichment.R	r	recipe	recipe:functional-enrichment	R-syntax+synthetic-execution;domain-golden-pending	Explicit associations/background; base hypergeometric/BH
+054	workspace/Kmeans_calculate.R	r	excluded	-	manual-review	Package-installing generic tutorial with iris example
+055	workspace/Pheatmap.R	r	deferred	-	manual-review	Hard-coded exploratory plot; reusable heatmap contract not approved
+056	workspace/Psmc-ggplot2.R	r	integrated	command:psmc-plot	R-syntax+synthetic-smoke	Base R rewrite; stages no longer hard-coded
+057	current-repository/biohub-rs/run-biohub.sh	shell	retained	launcher:run-biohub.sh	CI-build-path	Current development launcher
+058	current-repository/r/dotplot.R	r	retained	command:dotplot	container-smoke	Current base R backend
+059	legacy-rust-repository/run-biohub.sh	shell	superseded	launcher:run-biohub.sh	manual-review	Older repository duplicate
+060	legacy-python-package/__init__.py	python	superseded	binary:biohub	cargo-tests	Package marker replaced by Rust binary
+061	legacy-python-package/__main__.py	python	superseded	binary:biohub	cargo-tests	Python entry point replaced
+062	legacy-python-package/cli.py	python	superseded	binary:biohub	cli-tests	Parser surface migrated
+063	legacy-python-package/commands/__init__.py	python	superseded	binary:biohub	cargo-tests	Package dispatcher replaced
+064	legacy-python-package/commands/blast.py	python	integrated	direct:blast reciprocal	unit+docs	Direct command retained
+065	legacy-python-package/commands/fasta.py	python	integrated	direct:fasta longest-transcript	unit+docs	Direct command retained
+066	legacy-python-package/commands/gff.py	python	integrated	direct:gff	unit+docs	Three GFF direct commands retained
+067	legacy-python-package/commands/psmc.py	python	integrated	direct:psmc merge	docs;golden-pending	Merge helper retained
+068	legacy-python-package/commands/rename.py	python	integrated	direct:rename	unit+docs	Rename group retained
+069	legacy-python-package/commands/stats.py	python	integrated	direct:stats	unit+docs	Coverage/Hi-C/WGCNA group retained
+070	legacy-python-package/utils.py	python	superseded	binary:biohub	cargo-tests	Path/output utilities replaced
+071	workspace/data_transfer.R	r	excluded	-	manual-review	Incomplete generic reshape tutorial
+072	workspace/diff_expression.R	r	recipe	recipe:rnaseq-deseq2	R-syntax+synthetic-execution;domain-golden-pending	Raw count/design/contrast inputs parameterized
+073	dotplotly/dotPlotly_shiny/app.R	r	excluded	-	license+scope-review	Interactive Shiny application outside CLI scope
+074	dotplotly/mummerCoordsDotPlotly.R	r	integrated	command:dotplot	container-smoke	Static MUMmer parser rewrite; upstream notice retained
+075	dotplotly/pafCoordsDotPlotly.R	r	integrated	command:dotplot	container-smoke	Static PAF parser rewrite; upstream notice retained
+076	workspace/filter_gff_by_fasta.awk	awk	integrated	command:filter-gff-by-fasta	cli-regression	Bounds validation and descendant propagation
+077	workspace/gff_longest.py	python	superseded	direct:gff filter-gemoma	cli-tests	Compatibility launcher only
+078	workspace/gggenes.R	r	deferred	-	manual-review	Package-installing examples; no approved input/output contract
+079	workspace/hamstr.sh	shell	deferred	-	manual+license-review	Hard-coded taxa, paths and unsafe shell iteration
+080	workspace/heatmap.MWAH.R	r	excluded	-	license-review	Third-party restricted-license script; not copied
+081	workspace/run_calculate_covPercentage.py	python	integrated	direct:stats coverage-ratio	unit+docs	Reference-normalized coverage
+082	workspace/run_change_HJJN_geneName.py	python	integrated	direct:rename hjjn-genes	unit+docs	Gene-name normalization
+083	workspace/run_change_scaffolds_name.py	python	superseded	command:change-scaffolds-name	unit+catalog	Duplicate source copy
+084	workspace/run_change_scaffolds_name_fasta.py	python	superseded	command:change-scaffolds-name-fasta	catalog	Duplicate source copy
+085	workspace/run_compare_two_blastFile.py	python	superseded	command:compare-two-blast	catalog	Duplicate source copy
+086	workspace/run_convert_Hic_matrix.py	python	integrated	direct:stats hic-matrix-reindex	unit+docs	Matrix index conversion
+087	workspace/run_convert_TY-1and_HJJN.py	python	integrated	direct:gff convert-ty1-hjjn	unit+docs	Coordinate conversion
+088	workspace/run_filter_GeMoMa_AS_2.py	python	superseded	direct:gff filter-gemoma	unit+docs	Duplicate longest-isoform source
+089	workspace/run_filter_NCBI_gff_to_get_gene.py	python	integrated	direct:gff filter-ncbi	unit+docs	NCBI record conversion
+090	workspace/run_filter_ensembl_pep_longest.py	python	integrated	direct:fasta longest-transcript	unit+docs	Longest transcript selection
+091	workspace/run_produce_weight_file_forWGCNA.py	python	integrated	direct:stats wgcna-weight	unit+docs	Weight table conversion

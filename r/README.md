@@ -2,7 +2,7 @@
 
 R-backed commands live here after migration. Each entrypoint must:
 
-- accept explicit input and output arguments through `optparse`;
+- accept explicit input and output command-line arguments;
 - never call `install.packages`, `install_github`, `file.choose`, or `setwd`;
 - write only declared output paths;
 - return non-zero on validation or processing failure;

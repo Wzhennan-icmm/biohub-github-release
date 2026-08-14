@@ -1,0 +1,101 @@
+name: Domain containers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: comparative
+            recipes: comparative-orthology-codon,gene-family-cafe,selection-branch-site,dating-mcmctree,synteny-sv
+          - environment: assembly
+            recipes: assembly-t2t-evaluate
+          - environment: population
+            recipes: population-gwas,population-selection
+          - environment: variant
+            recipes: family-denovo-rate
+          - environment: omics
+            recipes: rnaseq-deseq2,functional-enrichment,microbiome-rda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Select image tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "BIOHUB_IMAGE_TAG=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "BIOHUB_IMAGE_TAG=dev" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        run: >-
+          docker build -f containers/Dockerfile.domain
+          --build-arg ENVIRONMENT=${{ matrix.environment }}
+          --tag ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG} .
+      - name: Smoke test
+        run: |
+          image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
+          docker run --rm "$image" --version
+          docker run --rm "$image" recipe list --format json
+          IFS=',' read -ra recipes <<< "${{ matrix.recipes }}"
+          for recipe in "${recipes[@]}"; do
+            docker run --rm "$image" doctor --recipe "$recipe" --strict
+          done
+      - name: Export exact environment
+        shell: bash
+        run: |
+          image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
+          mkdir -p domain-metadata
+          docker run --rm --entrypoint micromamba "$image" list --name base --explicit \
+            > "domain-metadata/biohub-${{ matrix.environment }}-${BIOHUB_IMAGE_TAG}.explicit.txt"
+          docker image inspect --format '{{.Id}}' "$image" \
+            > "domain-metadata/biohub-${{ matrix.environment }}-${BIOHUB_IMAGE_TAG}.local-image-id.txt"
+      - name: Execute low-risk synthetic workflows
+        if: matrix.environment == 'variant' || matrix.environment == 'omics'
+        shell: bash
+        run: |
+          image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
+          recipe_args=()
+          if [[ "${{ matrix.environment }}" == "variant" ]]; then
+            recipe_args+=(--recipe family-denovo-rate)
+          else
+            recipe_args+=(--recipe rnaseq-deseq2)
+            recipe_args+=(--recipe functional-enrichment)
+            recipe_args+=(--recipe microbiome-rda)
+          fi
+          docker run --rm -v "$PWD:/repo:ro" --entrypoint python "$image" \
+            /repo/tools/snakemake_smoke.py --root /repo --snakemake snakemake \
+            --biohub biohub --execute-safe "${recipe_args[@]}"
+      - if: github.ref_type == 'tag'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable release tag
+        if: github.ref_type == 'tag'
+        run: >-
+          docker push ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}
+      - name: Record published digest
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
+          docker buildx imagetools inspect "$image" \
+            | awk '/^Digest:/ {print $2; exit}' \
+            > "domain-metadata/biohub-${{ matrix.environment }}-${BIOHUB_IMAGE_TAG}.digest.txt"
+          test -s "domain-metadata/biohub-${{ matrix.environment }}-${BIOHUB_IMAGE_TAG}.digest.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: biohub-${{ matrix.environment }}-${{ env.BIOHUB_IMAGE_TAG }}-metadata
+          path: domain-metadata/

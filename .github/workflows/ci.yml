@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  recipes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check snakemake==9.23.1
+      - run: python tools/validate_recipes.py
+      - run: python -m unittest discover -s tools/tests -v
+      - run: python tools/snakemake_smoke.py
+      - run: python tools/snakemake_smoke.py --execute-safe --recipe family-denovo-rate
+
   rust:
     strategy:
       fail-fast: false
@@ -20,6 +33,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: python3 tools/validate_recipes.py
+        working-directory: .
       - run: cargo fmt --check
         working-directory: biohub-rs
       - run: cargo clippy --locked -- -D warnings
@@ -37,6 +52,7 @@ jobs:
       - run: docker build --tag biohub:test .
       - run: docker run --rm biohub:test catalog --format json
       - run: docker run --rm biohub:test doctor --json
+      - run: docker run --rm biohub:test recipe list --format json
       - run: >-
           docker run --rm biohub:test run dotplot
           --input /usr/local/share/biohub/examples/dotplot/input.paf
@@ -45,3 +61,7 @@ jobs:
           docker run --rm biohub:test run dotplot
           --input /usr/local/share/biohub/examples/dotplot/input.coords
           --output /tmp/dotplot.png --format coords
+      - run: >-
+          docker run --rm biohub:test run psmc-plot
+          --input /usr/local/share/biohub/examples/psmc/merged.tsv
+          --output /tmp/psmc.pdf --x-scale log10 --y-scale log10

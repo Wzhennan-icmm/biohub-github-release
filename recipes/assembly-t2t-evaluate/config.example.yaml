@@ -1,0 +1,11 @@
+# assemblies_manifest columns: assembly_id, fasta
+assemblies_manifest: REQUIRED
+reference_fasta: REQUIRED
+expected_chromosomes: null
+minimum_contig_length: null
+telomere_motif: REQUIRED
+telomere_window_bp: null
+minimum_telomere_hits: null
+minimap2_executable: minimap2
+minimap_preset: asm5
+threads: null

@@ -1,0 +1,29 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - traits_manifest
+  - kmers_table_prefix
+  - kmers_gwas_script
+  - python2_executable
+  - kmer_length
+  - threads
+  - minimum_data_points
+  - minor_allele_count
+  - minor_allele_frequency
+  - kmers_number
+  - permutations
+  - permutation_tail_percent
+properties:
+  traits_manifest: {type: string, minLength: 1}
+  kmers_table_prefix: {type: string, minLength: 1}
+  kmers_gwas_script: {type: string, minLength: 1}
+  python2_executable: {type: string, minLength: 1}
+  kmer_length: {type: integer, minimum: 1}
+  threads: {type: integer, minimum: 1}
+  minimum_data_points: {type: integer, minimum: 1}
+  minor_allele_count: {type: integer, minimum: 1}
+  minor_allele_frequency: {type: number, minimum: 0, maximum: 0.5}
+  kmers_number: {type: integer, minimum: 1}
+  permutations: {type: integer, minimum: 1}
+  permutation_tail_percent: {type: integer, enum: [5, 10]}

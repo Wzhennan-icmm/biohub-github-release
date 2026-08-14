@@ -1,0 +1,29 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - pairs_manifest
+  - require_matching_sequence_ids
+  - minimap2_executable
+  - minimap_preset
+  - threads
+  - minimum_alignment_length
+  - minimum_mapq
+  - syri_executable
+  - syri_cores
+  - syri_use_filtered_paf
+  - syri_include_cigar
+  - syri_include_snps
+properties:
+  pairs_manifest: {type: string, minLength: 1}
+  require_matching_sequence_ids: {type: boolean}
+  minimap2_executable: {type: string, minLength: 1}
+  minimap_preset: {type: string, enum: [asm5, asm10, asm20]}
+  threads: {type: integer, minimum: 1}
+  minimum_alignment_length: {type: integer, minimum: 1}
+  minimum_mapq: {type: integer, minimum: 0, maximum: 255}
+  syri_executable: {type: string, minLength: 1}
+  syri_cores: {type: integer, minimum: 1}
+  syri_use_filtered_paf: {type: boolean}
+  syri_include_cigar: {type: boolean}
+  syri_include_snps: {type: boolean}

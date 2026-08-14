@@ -1,0 +1,9 @@
+# comparisons_manifest columns: comparison_id, population1_samples, population2_samples
+vcf: REQUIRED
+comparisons_manifest: REQUIRED
+vcftools_executable: vcftools
+window_size_bp: null
+window_step_bp: null
+minor_allele_frequency: null
+minimum_site_call_rate: null
+candidate_fst_threshold: null

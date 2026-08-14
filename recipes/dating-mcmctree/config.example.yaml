@@ -1,0 +1,8 @@
+# runs_manifest columns: run_id, stage1_ctl, stage2_ctl
+runs_manifest: REQUIRED
+mcmctree_executable: mcmctree
+expected_loci: null
+expected_internal_nodes: null
+age_column_regex: REQUIRED
+burnin_samples: null
+minimum_ess: null

@@ -1,0 +1,111 @@
+from pathlib import Path
+import subprocess
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+FOREGROUND = str(Path(config["foreground_tsv"]).expanduser().resolve())
+BACKGROUND = str(Path(config["background_genes"]).expanduser().resolve())
+ASSOCIATIONS = str(Path(config["associations_tsv"]).expanduser().resolve())
+
+
+rule all:
+    input:
+        "results/enrichment_all.tsv",
+        "results/enrichment_significant.tsv",
+        "results/set_summary.tsv",
+        "results/README.txt",
+        "report/enrichment.pdf",
+        "logs/enrichment.log",
+        "inputs.manifest.tsv",
+        "report/functional-enrichment.tar.gz",
+
+
+rule enrichment:
+    input:
+        foreground=FOREGROUND,
+        background=BACKGROUND,
+        associations=ASSOCIATIONS,
+    output:
+        all="results/enrichment_all.tsv",
+        significant="results/enrichment_significant.tsv",
+        summary="results/set_summary.tsv",
+        plot="report/enrichment.pdf",
+        log="logs/enrichment.log",
+    params:
+        script=str(BASE / "run_enrichment.R"),
+    run:
+        subprocess.run(
+            [
+                "Rscript", params.script,
+                "--foreground", input.foreground,
+                "--background", input.background,
+                "--associations", input.associations,
+                "--sources", ",".join(config["sources"]),
+                "--minimum-term-size", str(config["minimum_term_size"]),
+                "--maximum-term-size", str(config["maximum_term_size"]),
+                "--minimum-overlap", str(config["minimum_overlap"]),
+                "--fdr", str(config["fdr"]),
+                "--adjustment-scope", str(config["adjustment_scope"]),
+                "--require-foreground-in-background", str(bool(config["require_foreground_in_background"])).lower(),
+                "--plot-top-terms", str(config["plot_top_terms"]),
+                "--all", output.all,
+                "--significant", output.significant,
+                "--summary", output.summary,
+                "--plot", output.plot,
+                "--log", output.log,
+            ],
+            check=True,
+        )
+
+
+rule input_manifest:
+    input:
+        FOREGROUND,
+        BACKGROUND,
+        ASSOCIATIONS,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        write_input_manifest(
+            [("foreground_tsv", input[0]), ("background_genes", input[1]), ("associations_tsv", input[2])],
+            output[0],
+        )
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "functional-enrichment",
+            "Foreground/background over-representation analysis using explicit term associations.",
+            [
+                "Background universe and association table are user-supplied, versionable inputs.",
+                "GO, KEGG or other sources use the same one-sided hypergeometric test.",
+                "Term-size, overlap, FDR and multiple-testing scope are explicit.",
+                "Foreground coverage and genes outside background are reported.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/enrichment_all.tsv",
+        "results/enrichment_significant.tsv",
+        "results/set_summary.tsv",
+        "results/README.txt",
+        "report/enrichment.pdf",
+        "logs/enrichment.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/functional-enrichment.tar.gz",
+    shell:
+        "tar -czf {output:q} {input:q}"

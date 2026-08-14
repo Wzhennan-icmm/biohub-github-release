@@ -1,0 +1,105 @@
+from pathlib import Path
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+PROTEINS = str(Path(config["protein_groups_dir"]).expanduser().resolve())
+CDS = str(Path(config["cds_fasta"]).expanduser().resolve())
+EXPECTED_TAXA = int(config["expected_taxa"])
+BIOHUB = str(config["biohub_executable"])
+
+
+rule all:
+    input:
+        "results/summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/comparative-orthology-codon.tar.gz",
+
+
+rule codon_alignments:
+    input:
+        cds=CDS,
+    output:
+        alignments=directory("results/codon_alignments"),
+        complete="results/codon_alignments.complete",
+    log:
+        "logs/codon_alignments.log",
+    params:
+        proteins=PROTEINS,
+        biohub=BIOHUB,
+    shell:
+        r"""
+        set -euo pipefail
+        tmpdir=$(mktemp -d results/.codon_alignments.tmp.XXXXXX)
+        {params.biohub:q} run orthofinder-to-pal2nal \
+          --path {params.proteins:q} --nucl {input.cds:q} --output "$tmpdir" \
+          > {log:q} 2>&1
+        mv "$tmpdir" {output.alignments:q}
+        test -s {output.alignments:q}/validation_summary.tsv
+        touch {output.complete:q}
+        """
+
+
+rule summarize:
+    input:
+        "results/codon_alignments.complete",
+    output:
+        summary="results/summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        expected=EXPECTED_TAXA,
+        validation="results/codon_alignments/validation_summary.tsv",
+    shell:
+        r"""
+        python3 {params.script:q} --validation {params.validation:q} \
+          --expected-taxa {params.expected} --summary {output.summary:q} \
+          --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        cds=CDS,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        write_input_manifest(
+            [("protein_groups", PROTEINS), ("cds_fasta", input.cds)], output[0]
+        )
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "comparative-orthology-codon",
+            "Validated protein-to-CDS mapping followed by MAFFT and gap-free PAL2NAL conversion.",
+            [
+                "CDS IDs are unique, present, non-empty and divisible by three.",
+                "Protein and CDS counts equal configured expected_taxa for every group.",
+                "Any skipped or failed orthogroup makes workflow fail.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        summary="results/summary.tsv",
+        readme="results/README.txt",
+        validation="logs/validation.log",
+        manifest="inputs.manifest.tsv",
+    output:
+        "report/comparative-orthology-codon.tar.gz",
+    shell:
+        "tar -czf {output:q} results logs inputs.manifest.tsv"

@@ -1,0 +1,13 @@
+# foreground_tsv columns: set_id, gene_id.
+# associations_tsv columns: gene_id, term_id, source, term_name (term_name optional).
+foreground_tsv: REQUIRED
+background_genes: REQUIRED
+associations_tsv: REQUIRED
+sources: [GO, KEGG]
+minimum_term_size: null
+maximum_term_size: null
+minimum_overlap: null
+fdr: null
+adjustment_scope: set_source
+require_foreground_in_background: true
+plot_top_terms: null

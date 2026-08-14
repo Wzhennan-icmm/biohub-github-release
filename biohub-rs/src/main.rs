@@ -9,9 +9,11 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod recipe;
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-const VERSION: &str = "0.3.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 static PROTECT_OUTPUTS: AtomicBool = AtomicBool::new(false);
 
 fn print_help() {
@@ -33,9 +35,10 @@ Commands:
   stats coverage-ratio   -i <input> -r <reference> [-o <output>]
   stats hic-matrix-reindex -b <bed> -m <matrix> -p <group> [-o <output>]
   stats wgcna-weight     -i <weight-file> [-o <output>]
-  catalog [--format table|json]
+  catalog [--format table|json] [--kind all|command|recipe]
   run <script-id> [options] [--force]
-  doctor [--strict] [--json]
+  doctor [--strict] [--json] [--recipe <recipe-id>]
+  recipe list|describe|init|validate|run|report
   r list
   r run dotplot --input <paf-or-coords> --output <pdf-or-png> [--format paf|coords]
   scripts catalog
@@ -472,8 +475,9 @@ fn script_category(id: &str) -> &'static str {
 
 fn script_backend(id: &str) -> &'static str {
     match id {
-        "dotplot" => "r",
-        "orthofiner-to-pal2nal"
+        "dotplot" | "psmc-plot" => "r",
+        "orthofinder-to-pal2nal"
+        | "orthofiner-to-pal2nal"
         | "merge-two-end-bam"
         | "merge-two-end-bam1"
         | "merge-two-end-bam-forMGI" => "rust+external",
@@ -483,8 +487,8 @@ fn script_backend(id: &str) -> &'static str {
 
 fn script_dependencies(id: &str) -> &'static [&'static str] {
     match id {
-        "dotplot" => &["Rscript"],
-        "orthofiner-to-pal2nal" => &["mafft", "pal2nal.pl"],
+        "dotplot" | "psmc-plot" => &["Rscript"],
+        "orthofinder-to-pal2nal" | "orthofiner-to-pal2nal" => &["mafft", "pal2nal.pl"],
         "merge-two-end-bam" | "merge-two-end-bam1" | "merge-two-end-bam-forMGI" => &["samtools"],
         _ => &[],
     }
@@ -493,6 +497,7 @@ fn script_dependencies(id: &str) -> &'static [&'static str] {
 fn r_script_path(id: &str) -> Result<PathBuf> {
     let file = match id {
         "dotplot" => "dotplot.R",
+        "psmc-plot" => "psmc_plot.R",
         _ => return Err(format!("unknown R command: {id}").into()),
     };
     if let Ok(dir) = env::var("BIOHUB_R_DIR") {
@@ -531,6 +536,7 @@ fn run_r(args: &[String]) -> i32 {
     }
     if args.is_empty() || args[0] == "list" {
         println!("dotplot\tPAF/MUMmer coordinate static dot plot\tRscript");
+        println!("psmc-plot\tPSMC demographic trajectory plot\tRscript");
         return 0;
     }
     if args[0] != "run" || args.len() < 2 {
@@ -559,28 +565,42 @@ fn run_r(args: &[String]) -> i32 {
 }
 
 fn print_script_catalog_json() {
+    let objects = script_catalog_json_objects();
     println!("[");
-    let specs = load_script_catalog();
-    for (index, spec) in specs.iter().enumerate() {
+    for (index, object) in objects.iter().enumerate() {
+        println!(
+            "  {}{}",
+            object,
+            if index + 1 == objects.len() { "" } else { "," }
+        );
+    }
+    println!("]");
+}
+
+fn script_catalog_json_objects() -> Vec<String> {
+    load_script_catalog()
+        .iter()
+        .map(|spec| {
         let deps = script_dependencies(&spec.id)
             .iter()
             .map(|dep| format!("\"{}\"", json_escape(dep)))
             .collect::<Vec<_>>()
             .join(",");
-        println!(
-            "  {{\"id\":\"{}\",\"source\":\"{}\",\"description\":\"{}\",\"status\":\"{}\",\"note\":\"{}\",\"category\":\"{}\",\"backend\":\"{}\",\"dependencies\":[{}]}}{}",
+        format!(
+            "{{\"id\":\"{}\",\"kind\":\"command\",\"source\":\"{}\",\"description\":\"{}\",\"status\":\"{}\",\"note\":\"{}\",\"category\":\"{}\",\"domain\":\"{}\",\"backend\":\"{}\",\"dependencies\":[{}],\"version\":\"{}\",\"license\":\"MIT\"}}",
             json_escape(&spec.id),
             json_escape(&spec.source),
             json_escape(&spec.description),
             json_escape(&spec.status),
             json_escape(&spec.note),
             script_category(&spec.id),
+            script_category(&spec.id),
             script_backend(&spec.id),
             deps,
-            if index + 1 == specs.len() { "" } else { "," }
-        );
-    }
-    println!("]");
+            env!("CARGO_PKG_VERSION")
+        )
+    })
+    .collect()
 }
 
 fn print_script_help(id: &str) -> i32 {
@@ -605,43 +625,69 @@ fn print_script_help(id: &str) -> i32 {
 }
 
 fn command_available(command: &str) -> bool {
-    let Some(path_var) = env::var_os("PATH") else {
-        return false;
-    };
-    env::split_paths(&path_var).any(|dir| {
-        let candidate = dir.join(command);
-        candidate.is_file() || cfg!(windows) && candidate.with_extension("exe").is_file()
-    })
+    recipe::command_available(command)
 }
 
 fn run_doctor(args: &[String]) -> i32 {
     if needs_help(args) {
-        println!("Usage: biohub doctor [--strict] [--json]");
+        println!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
         return 0;
     }
     let json = args.iter().any(|arg| arg == "--json");
     let strict = args.iter().any(|arg| arg == "--strict");
-    if args.iter().any(|arg| arg != "--json" && arg != "--strict") {
-        eprintln!("Usage: biohub doctor [--strict] [--json]");
-        return 2;
+    let mut recipe_id: Option<String> = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" | "--strict" => index += 1,
+            "--recipe" => {
+                if recipe_id.is_some() || index + 1 >= args.len() {
+                    eprintln!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
+                    return 2;
+                }
+                recipe_id = Some(args[index + 1].clone());
+                index += 2;
+            }
+            _ => {
+                eprintln!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
+                return 2;
+            }
+        }
     }
 
-    let checks = [
-        ("Rscript", "R-backed visualization and statistics commands"),
-        ("samtools", "BAM pair merge commands"),
-        ("mafft", "orthofiner-to-pal2nal"),
-        ("pal2nal.pl", "orthofiner-to-pal2nal"),
-        ("hamstr", "optional Hamstr adapter"),
-    ];
+    let checks: Vec<(String, String)> = if let Some(id) = recipe_id.as_deref() {
+        match recipe::recipe_dependencies(id) {
+            Ok(dependencies) => dependencies
+                .into_iter()
+                .map(|command| (command, format!("recipe {id}")))
+                .collect(),
+            Err(error) => {
+                eprintln!("{error}");
+                return 1;
+            }
+        }
+    } else {
+        [
+            ("Rscript", "R-backed visualization and statistics commands"),
+            ("samtools", "BAM pair merge commands"),
+            ("mafft", "orthofiner-to-pal2nal"),
+            ("pal2nal.pl", "orthofiner-to-pal2nal"),
+            ("hamstr", "optional Hamstr adapter"),
+            ("snakemake", "project-level recipe workflows"),
+        ]
+        .iter()
+        .map(|(command, purpose)| (command.to_string(), purpose.to_string()))
+        .collect()
+    };
     let mut missing = Vec::new();
-    let results: Vec<(&str, &str, bool)> = checks
+    let results: Vec<(String, String, bool)> = checks
         .iter()
         .map(|(command, purpose)| {
-            let available = command_available(command);
+            let available = recipe::dependency_available(command);
             if !available {
-                missing.push(*command);
+                missing.push(command.clone());
             }
-            (*command, *purpose, available)
+            (command.clone(), purpose.clone(), available)
         })
         .collect();
 
@@ -650,7 +696,7 @@ fn run_doctor(args: &[String]) -> i32 {
         for (index, (command, purpose, available)) in results.iter().enumerate() {
             println!(
                 "  {{\"command\":\"{}\",\"purpose\":\"{}\",\"available\":{}}}{}",
-                command,
+                json_escape(command),
                 json_escape(purpose),
                 available,
                 if index + 1 == results.len() { "" } else { "," }
@@ -672,7 +718,7 @@ fn run_doctor(args: &[String]) -> i32 {
                 "\nMissing optional or command-specific dependencies: {}",
                 missing.join(", ")
             );
-            println!("Docker image supplies Rscript, samtools, mafft, and pal2nal.pl.");
+            println!("Use matching locked BioHub environment or domain container.");
         }
     }
 
@@ -681,6 +727,86 @@ fn run_doctor(args: &[String]) -> i32 {
     } else {
         0
     }
+}
+
+fn run_catalog(args: &[String]) -> i32 {
+    if needs_help(args) {
+        println!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+        return 0;
+    }
+    let mut format = None;
+    let mut kind = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        if index + 1 >= args.len() {
+            eprintln!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+            return 2;
+        }
+        match args[index].as_str() {
+            "--format" if format.is_none() => format = Some(args[index + 1].as_str()),
+            "--kind" if kind.is_none() => kind = Some(args[index + 1].as_str()),
+            _ => {
+                eprintln!(
+                    "Usage: biohub catalog [--format table|json] [--kind all|command|recipe]"
+                );
+                return 2;
+            }
+        }
+        index += 2;
+    }
+    let format = format.unwrap_or("table");
+    let kind = kind.unwrap_or("all");
+    if !matches!(format, "table" | "json") || !matches!(kind, "all" | "command" | "recipe") {
+        eprintln!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+        return 2;
+    }
+
+    if format == "json" {
+        let mut objects = Vec::new();
+        if matches!(kind, "all" | "command") {
+            objects.extend(script_catalog_json_objects());
+        }
+        if matches!(kind, "all" | "recipe") {
+            match recipe::recipe_catalog_json_objects() {
+                Ok(recipes) => objects.extend(recipes),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            }
+        }
+        println!("[");
+        for (object_index, object) in objects.iter().enumerate() {
+            println!(
+                "  {}{}",
+                object,
+                if object_index + 1 == objects.len() {
+                    ""
+                } else {
+                    ","
+                }
+            );
+        }
+        println!("]");
+        return 0;
+    }
+
+    if matches!(kind, "all" | "command") {
+        if kind == "all" {
+            println!("COMMANDS");
+        }
+        print_script_catalog();
+    }
+    if matches!(kind, "all" | "recipe") {
+        if kind == "all" {
+            println!("\nRECIPES");
+        }
+        if let Err(error) = recipe::print_recipe_catalog_table() {
+            eprintln!("{error}");
+            return 1;
+        }
+    }
+    0
 }
 
 fn get_opt(args: &[String], keys: &[&str]) -> Option<String> {
@@ -1592,6 +1718,201 @@ fn run_filter_gtf_ctg(input: &str, id_list: &str, output: &str) -> Result<i32> {
         }
         writeln!(out, "{}", raw)?;
     }
+    Ok(0)
+}
+
+#[derive(Debug)]
+enum LengthFilteredGffEntry {
+    Raw(String),
+    Record {
+        raw: String,
+        id: Option<String>,
+        parents: Vec<String>,
+        direct_invalid: bool,
+    },
+}
+
+fn run_filter_gff_by_fasta_lengths(
+    gff: &str,
+    lengths_file: &str,
+    output: Option<&str>,
+) -> Result<i32> {
+    let mut lengths: HashMap<String, usize> = HashMap::new();
+    let mut length_reader = open_reader(lengths_file)?;
+    let mut line = String::new();
+    let mut length_line = 0usize;
+    while length_reader.read_line(&mut line)? > 0 {
+        length_line += 1;
+        let raw = line.trim_end_matches(['\n', '\r']).trim().to_string();
+        line.clear();
+        if raw.is_empty() || raw.starts_with('#') {
+            continue;
+        }
+        let columns: Vec<&str> = raw.split_whitespace().collect();
+        if columns.len() < 2 {
+            return Err(format!(
+                "invalid lengths row {length_line}: expected sequence ID and length"
+            )
+            .into());
+        }
+        let length = columns[1].parse::<usize>().map_err(|_| {
+            format!(
+                "invalid sequence length at row {length_line}: {}",
+                columns[1]
+            )
+        })?;
+        if length == 0 {
+            return Err(format!("sequence length must be positive at row {length_line}").into());
+        }
+        if let Some(previous) = lengths.insert(columns[0].to_string(), length) {
+            if previous != length {
+                return Err(format!(
+                    "conflicting lengths for sequence {}: {previous} and {length}",
+                    columns[0]
+                )
+                .into());
+            }
+        }
+    }
+    if lengths.is_empty() {
+        return Err("lengths file contains no sequence lengths".into());
+    }
+
+    let mut entries = Vec::new();
+    let mut invalid_nodes: HashSet<String> = HashSet::new();
+    let mut relationships: Vec<(String, Vec<String>)> = Vec::new();
+    let mut missing_contigs: HashSet<String> = HashSet::new();
+    let mut gff_reader = open_reader(gff)?;
+    let mut gff_line = 0usize;
+    while gff_reader.read_line(&mut line)? > 0 {
+        gff_line += 1;
+        let raw = line.trim_end_matches(['\n', '\r']).to_string();
+        line.clear();
+        if raw.is_empty() || raw.starts_with('#') {
+            entries.push(LengthFilteredGffEntry::Raw(raw));
+            continue;
+        }
+        let columns: Vec<&str> = raw.split('\t').collect();
+        if columns.len() != 9 {
+            entries.push(LengthFilteredGffEntry::Raw(raw));
+            continue;
+        }
+        let start = columns[3]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid GFF start at row {gff_line}: {}", columns[3]))?;
+        let end = columns[4]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid GFF end at row {gff_line}: {}", columns[4]))?;
+        if start == 0 || end < start {
+            return Err(format!(
+                "invalid GFF interval at row {gff_line}: {}-{}",
+                columns[3], columns[4]
+            )
+            .into());
+        }
+
+        let direct_invalid = match lengths.get(columns[0]) {
+            Some(length) => end > *length,
+            None => {
+                missing_contigs.insert(columns[0].to_string());
+                true
+            }
+        };
+        let attributes = parse_gff_attrs(columns[8]);
+        let id = attributes
+            .get("ID")
+            .filter(|value| !value.is_empty())
+            .cloned();
+        let parents: Vec<String> = attributes
+            .get("Parent")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(id) = id.as_ref() {
+            relationships.push((id.clone(), parents.clone()));
+        }
+        if direct_invalid {
+            match columns[2].to_ascii_lowercase().as_str() {
+                "gene" | "mrna" | "transcript" => {
+                    if let Some(id) = id.as_ref() {
+                        invalid_nodes.insert(id.clone());
+                    } else {
+                        invalid_nodes.extend(parents.iter().cloned());
+                    }
+                }
+                _ if !parents.is_empty() => invalid_nodes.extend(parents.iter().cloned()),
+                _ => {
+                    if let Some(id) = id.as_ref() {
+                        invalid_nodes.insert(id.clone());
+                    }
+                }
+            }
+        }
+        entries.push(LengthFilteredGffEntry::Record {
+            raw,
+            id,
+            parents,
+            direct_invalid,
+        });
+    }
+
+    loop {
+        let mut changed = false;
+        for (id, parents) in &relationships {
+            if !invalid_nodes.contains(id)
+                && parents.iter().any(|parent| invalid_nodes.contains(parent))
+            {
+                invalid_nodes.insert(id.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut writer = open_writer(output)?;
+    let mut printed_records = 0usize;
+    let mut skipped_records = 0usize;
+    let mut preserved_non_records = 0usize;
+    for entry in entries {
+        match entry {
+            LengthFilteredGffEntry::Raw(raw) => {
+                writeln!(writer, "{raw}")?;
+                preserved_non_records += 1;
+            }
+            LengthFilteredGffEntry::Record {
+                raw,
+                id,
+                parents,
+                direct_invalid,
+            } => {
+                let invalid = direct_invalid
+                    || id
+                        .as_ref()
+                        .is_some_and(|value| invalid_nodes.contains(value))
+                    || parents.iter().any(|value| invalid_nodes.contains(value));
+                if invalid {
+                    skipped_records += 1;
+                } else {
+                    writeln!(writer, "{raw}")?;
+                    printed_records += 1;
+                }
+            }
+        }
+    }
+    writer.flush()?;
+    eprintln!(
+        "printed_records={printed_records} skipped_records={skipped_records} preserved_non_records={preserved_non_records} invalid_models={} missing_contigs={}",
+        invalid_nodes.len(),
+        missing_contigs.len()
+    );
     Ok(0)
 }
 
@@ -5037,8 +5358,8 @@ fn run_scripts(args: &[String]) -> i32 {
     };
 
     match script {
-        "dotplot" => {
-            let mut r_args = vec!["run".to_string(), "dotplot".to_string()];
+        "dotplot" | "psmc-plot" => {
+            let mut r_args = vec!["run".to_string(), script.to_string()];
             r_args.extend_from_slice(script_args);
             run_r(&r_args)
         }
@@ -5206,6 +5527,32 @@ fn run_scripts(args: &[String]) -> i32 {
                 }
             };
             run(run_filter_gtf_ctg(&input, &ids, &output))
+        }
+        "filter-gff-by-fasta" => {
+            let gff = match get_required_opt(script_args, &["-i", "--input", "--gff"], "input gff")
+            {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            };
+            let lengths = match get_required_opt(
+                script_args,
+                &["-l", "--lengths", "--fai"],
+                "FASTA index or two-column lengths file",
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            };
+            run(run_filter_gff_by_fasta_lengths(
+                &gff,
+                &lengths,
+                get_opt(script_args, &["-o", "--output"]).as_deref(),
+            ))
         }
         "merge-two-txt" => {
             let input =
@@ -5997,7 +6344,7 @@ fn run_scripts(args: &[String]) -> i32 {
                 get_opt(script_args, &["-o", "--output"]).as_deref(),
             ))
         }
-        "orthofiner-to-pal2nal" => {
+        "orthofinder-to-pal2nal" | "orthofiner-to-pal2nal" => {
             let prot_dir = match get_required_opt(
                 script_args,
                 &["-p", "--pathOfprot", "--path", "--input"],
@@ -6741,11 +7088,7 @@ fn main() {
         "gff" => run_gff(&args[2..]),
         "fasta" => run_fasta(&args[2..]),
         "stats" => run_stats(&args[2..]),
-        "catalog" => {
-            let mut catalog_args = vec!["catalog".to_string()];
-            catalog_args.extend_from_slice(&args[2..]);
-            run_scripts(&catalog_args)
-        }
+        "catalog" => run_catalog(&args[2..]),
         "run" => {
             let force = args[2..].iter().any(|arg| arg == "--force");
             PROTECT_OUTPUTS.store(!force, Ordering::Relaxed);
@@ -6754,6 +7097,7 @@ fn main() {
             run_scripts(&script_args)
         }
         "doctor" => run_doctor(&args[2..]),
+        "recipe" => recipe::run_recipe_cli(&args[2..]),
         "r" => run_r(&args[2..]),
         "scripts" => {
             PROTECT_OUTPUTS.store(false, Ordering::Relaxed);

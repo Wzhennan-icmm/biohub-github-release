@@ -1,0 +1,11 @@
+# tests_manifest columns: test_id, alignment, marked_tree, foreground
+tests_manifest: REQUIRED
+expected_taxa: null
+codeml_executable: codeml
+codon_frequency: 2
+initial_kappa: 2.0
+alternative_initial_omega: 1.5
+clean_data: 1
+optimizer_method: 0
+beb_thresholds: [0.95, 0.99]
+bh_family: all_manifest_tests

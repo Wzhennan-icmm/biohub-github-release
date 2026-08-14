@@ -1,0 +1,135 @@
+from pathlib import Path
+import csv
+import glob
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+MANIFEST = str(Path(config["traits_manifest"]).expanduser().resolve())
+TABLE_PREFIX = str(Path(config["kmers_table_prefix"]).expanduser().resolve())
+SCRIPT = str(Path(config["kmers_gwas_script"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+if not ROWS or not {"trait_id", "phenotype_file"}.issubset(ROWS[0]):
+    raise ValueError("traits_manifest needs trait_id and phenotype_file columns")
+TRAITS = [row["trait_id"] for row in ROWS]
+if len(TRAITS) != len(set(TRAITS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in TRAITS):
+    raise ValueError("trait_id values must be unique safe identifiers")
+TRAIT_MAP = {row["trait_id"]: row for row in ROWS}
+TABLE_FILES = sorted(glob.glob(TABLE_PREFIX + "*"))
+if not TABLE_FILES:
+    raise ValueError("no files match kmers_table_prefix")
+
+
+rule all:
+    input:
+        "results/trait_status.tsv",
+        "results/significant_kmers.tsv",
+        "results/significant_kmers.fasta",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/kmer-gwas.tar.gz",
+
+
+rule associate:
+    input:
+        phenotype=lambda wildcards: str(Path(TRAIT_MAP[wildcards.trait_id]["phenotype_file"]).expanduser().resolve()),
+        table=TABLE_FILES,
+        script=SCRIPT,
+    output:
+        directory("results/associations/{trait_id}"),
+    log:
+        "logs/{trait_id}.kmer_gwas.log",
+    params:
+        runner=str(BASE / "run.py"),
+        python=config["python2_executable"],
+        table_prefix=TABLE_PREFIX,
+        kmers_number=int(config["kmers_number"]),
+        permutations=int(config["permutations"]),
+        maf=float(config["minor_allele_frequency"]),
+        mac=int(config["minor_allele_count"]),
+        points=int(config["minimum_data_points"]),
+        length=int(config["kmer_length"]),
+        threads=int(config["threads"]),
+    shell:
+        r"""
+        python3 {params.runner:q} --python {params.python:q} --script {input.script:q} \
+          --phenotype {input.phenotype:q} --kmers-table {params.table_prefix:q} \
+          --kmers-number {params.kmers_number} --permutations {params.permutations} \
+          --maf {params.maf} --mac {params.mac} --minimum-data-points {params.points} \
+          --kmer-length {params.length} --threads {params.threads} \
+          --output {output:q} --log {log:q}
+        """
+
+
+rule summarize:
+    input:
+        expand("results/associations/{trait_id}", trait_id=TRAITS),
+    output:
+        status="results/trait_status.tsv",
+        candidates="results/significant_kmers.tsv",
+        fasta="results/significant_kmers.fasta",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        ids=" ".join(f"--trait-id {item}" for item in TRAITS),
+        tail=int(config["permutation_tail_percent"]),
+    shell:
+        r"""
+        python3 {params.script:q} {params.ids} --root results/associations --tail {params.tail} \
+          --status {output.status:q} --candidates {output.candidates:q} \
+          --fasta {output.fasta:q} --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        MANIFEST,
+        SCRIPT,
+        TABLE_FILES,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("traits_manifest", input[0]), ("kmers_gwas_script", input[1])]
+        items.extend((f"kmers_table/{Path(path).name}", path) for path in TABLE_FILES)
+        items.extend((f"phenotype/{row['trait_id']}", row["phenotype_file"]) for row in ROWS)
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "kmer-gwas",
+            "Association testing against a prepared k-mer table using a user-supplied kmer-GWAS implementation.",
+            [
+                "K-mer length, data-point, MAC, MAF, permutation and thread settings are explicit.",
+                "External kmer-GWAS source is not vendored; its path and checksum enter provenance.",
+                "Permutation 5%/10% result choice remains explicit.",
+                "Extracted sequence FASTA is emitted only when a DNA-like field exists in significant rows.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/trait_status.tsv",
+        "results/significant_kmers.tsv",
+        "results/significant_kmers.fasta",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/kmer-gwas.tar.gz",
+    shell:
+        "tar -czf {output:q} results/trait_status.tsv results/significant_kmers.tsv results/significant_kmers.fasta results/README.txt logs/validation.log inputs.manifest.tsv"

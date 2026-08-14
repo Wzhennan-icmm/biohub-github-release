@@ -1,0 +1,23 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - counts_matrix
+  - samples_tsv
+  - contrasts_manifest
+  - design
+  - minimum_count
+  - minimum_samples
+  - alpha
+  - minimum_absolute_log2_fold_change
+  - independent_filtering
+properties:
+  counts_matrix: {type: string, minLength: 1}
+  samples_tsv: {type: string, minLength: 1}
+  contrasts_manifest: {type: string, minLength: 1}
+  design: {type: string, pattern: '^~.+'}
+  minimum_count: {type: integer, minimum: 0}
+  minimum_samples: {type: integer, minimum: 1}
+  alpha: {type: number, exclusiveMinimum: 0, maximum: 1}
+  minimum_absolute_log2_fold_change: {type: number, minimum: 0}
+  independent_filtering: {type: boolean}

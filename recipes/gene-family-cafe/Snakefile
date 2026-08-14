@@ -1,0 +1,181 @@
+from pathlib import Path
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+COUNTS = str(Path(config["gene_counts"]).expanduser().resolve())
+TREE = str(Path(config["tree"]).expanduser().resolve())
+REPLICATES = list(range(1, int(config["replicates"]) + 1))
+MODEL_K = int(config["model_k"])
+
+
+rule all:
+    input:
+        "results/expanded_families.tsv",
+        "results/contracted_families.tsv",
+        "results/summary_by_node.tsv",
+        "results/model_fit_replicates.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/gene-family-cafe.tar.gz",
+
+
+rule prepare:
+    input:
+        counts=COUNTS,
+        tree=TREE,
+    output:
+        matrix="results/prepared/gene_families.tsv",
+        tree="results/prepared/species_tree.nwk",
+        manifest="results/family_filter_manifest.tsv",
+        tree_qc="results/tree_qc.tsv",
+        summary="results/input_summary.tsv",
+    params:
+        script=str(BASE / "prepare.py"),
+        input_format=config["input_format"],
+        max_size=int(config["max_family_size"]),
+        tolerance=float(config["ultrametric_tolerance"]),
+    log:
+        "logs/prepare.log",
+    shell:
+        r"""
+        python3 {params.script:q} --counts {input.counts:q} --tree {input.tree:q} \
+          --input-format {params.input_format:q} --max-family-size {params.max_size} \
+          --ultrametric-tolerance {params.tolerance} --matrix {output.matrix:q} \
+          --tree-output {output.tree:q} --filter-manifest {output.manifest:q} \
+          --tree-qc {output.tree_qc:q} --summary {output.summary:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule cafe_replicate:
+    input:
+        matrix="results/prepared/gene_families.tsv",
+        tree="results/prepared/species_tree.nwk",
+    output:
+        directory("results/cafe/rep{replicate}"),
+    log:
+        "logs/cafe_rep{replicate}.log",
+    params:
+        script=str(BASE / "run_cafe.py"),
+        executable=config["cafe_executable"],
+        cores=int(config["cores"]),
+        model_k=MODEL_K,
+        root=float(config["root_distribution"]),
+        error=lambda wildcards: config.get("error_model"),
+        lambda_value=lambda wildcards: config.get("lambda_value"),
+        alpha=lambda wildcards: config.get("alpha_value"),
+        family_p=float(config["family_pvalue"]),
+    run:
+        import subprocess
+        command = [
+            "python3", params.script,
+            "--executable", str(params.executable),
+            "--matrix", input.matrix,
+            "--tree", input.tree,
+            "--cores", str(params.cores),
+            "--model-k", str(params.model_k),
+            "--root-distribution", str(params.root),
+            "--family-pvalue", str(params.family_p),
+            "--output", output[0],
+            "--log", log[0],
+        ]
+        if params.error is not None:
+            command.extend(["--error-model", str(params.error)])
+        if params.lambda_value is not None:
+            command.extend(["--lambda-value", str(params.lambda_value)])
+        if params.alpha is not None:
+            command.extend(["--alpha-value", str(params.alpha)])
+        subprocess.run(command, check=True)
+
+
+rule select_model:
+    input:
+        expand("results/cafe/rep{replicate}", replicate=REPLICATES),
+    output:
+        summary="results/model_fit_replicates.tsv",
+        selected="results/selected_run.txt",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "select.py"),
+        runs="results/cafe",
+        model_k=MODEL_K,
+        replicates=len(REPLICATES),
+        minimum=int(config["minimum_converged_replicates"]),
+        likelihood=float(config["likelihood_tolerance"]),
+        cv=float(config["parameter_cv_tolerance"]),
+    shell:
+        r"""
+        python3 {params.script:q} --runs {params.runs:q} --model-k {params.model_k} \
+          --replicates {params.replicates} --minimum-converged {params.minimum} \
+          --likelihood-tolerance {params.likelihood} --parameter-cv-tolerance {params.cv} \
+          --summary {output.summary:q} --selected {output.selected:q} \
+          --log {output.validation:q}
+        """
+
+
+rule parse_changes:
+    input:
+        selected="results/selected_run.txt",
+    output:
+        expanded="results/expanded_families.tsv",
+        contracted="results/contracted_families.tsv",
+        summary="results/summary_by_node.tsv",
+    params:
+        script=str(BASE / "parse_changes.py"),
+        model_k=MODEL_K,
+    shell:
+        r"""
+        python3 {params.script:q} --selected {input.selected:q} --model-k {params.model_k} \
+          --expanded {output.expanded:q} --contracted {output.contracted:q} \
+          --summary {output.summary:q}
+        """
+
+
+rule input_manifest:
+    input:
+        counts=COUNTS,
+        tree=TREE,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        write_input_manifest([("gene_counts", input.counts), ("species_tree", input.tree)], output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "gene-family-cafe",
+            "Filtered CAFE5 family-count analysis on a validated ultrametric species tree.",
+            [
+                "Family counts are non-negative integers with unique family IDs.",
+                "Tree taxa exactly match count columns and root-to-tip deviation stays within configured tolerance.",
+                "Expansion means inferred branch change > 0; contraction means change < 0.",
+                "Convergence tolerances and minimum replicate count come from config, not hidden defaults.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/expanded_families.tsv",
+        "results/contracted_families.tsv",
+        "results/summary_by_node.tsv",
+        "results/model_fit_replicates.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/gene-family-cafe.tar.gz",
+    shell:
+        "tar -czf {output:q} results logs inputs.manifest.tsv"
