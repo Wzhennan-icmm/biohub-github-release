@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   recipes:
@@ -16,8 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --disable-pip-version-check snakemake==9.23.1
+      - run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
       - run: python tools/validate_recipes.py
+      - run: python tools/validate_release.py
       - run: python -m unittest discover -s tools/tests -v
       - run: python tools/snakemake_smoke.py
       - run: python tools/snakemake_smoke.py --execute-safe --recipe family-denovo-rate
@@ -37,12 +39,34 @@ jobs:
         working-directory: .
       - run: cargo fmt --check
         working-directory: biohub-rs
-      - run: cargo clippy --locked -- -D warnings
+      - run: cargo clippy --locked --all-targets -- -D warnings
         working-directory: biohub-rs
       - run: cargo test --locked
         working-directory: biohub-rs
       - run: cargo run --locked -- catalog --format json > /tmp/catalog.json
         working-directory: biohub-rs
+
+  external-goldens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes samtools
+      - run: >-
+          BIOHUB_REQUIRE_EXTERNAL_GOLDENS=1 cargo test --locked
+          --test publication_goldens
+          bam_commands_match_external_goldens_when_samtools_is_available
+        working-directory: biohub-rs
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: biohub-rs
 
   container:
     runs-on: ubuntu-latest

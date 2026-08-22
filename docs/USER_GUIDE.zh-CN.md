@@ -456,21 +456,21 @@ workflow SHA256 与推荐容器；容器运行时应设置 `BIOHUB_CONTAINER_DIG
 - **用途**：按历史点号标题规则选择每个基因最长记录，并输出名称对应关系。
 - **调用**：`biohub run get-the-longest-seq -i <protein.fa> [-o <mapping.tsv>]`
 - **输入/输出**：标题预期形如 `transcript.gene...`；使用第 2 个点号字段作为 gene、第 1 个字段作为 transcript，输出 `transcript<TAB>gene`，不输出序列。
-- **依赖/注意**：点号不足的标题被忽略；聚合输出顺序不保证。名称规则不符合时应使用稳定入口或先标准化标题。
+- **依赖/注意**：点号不足的标题被忽略；输出按 gene 排序。名称规则不符合时应使用稳定入口或先标准化标题。
 
 ### `get-longest-transcript`
 
 - **用途**：删除标题最后一个点号后缀作为 gene 分组，输出每组最长 FASTA 记录。
 - **调用**：`biohub run get-longest-transcript -i <input.fa> [-o <longest.fa>]`
 - **输入/输出**：例如 `GeneA.iso1` 和 `GeneA.iso2` 分为同组；输出完整原标题和单行序列。
-- **依赖/注意**：无点号标题被忽略；等长保留先出现记录；组和输出顺序不保证。不要与能识别 `gene=` 的 `biohub fasta longest-transcript` 混淆。
+- **依赖/注意**：无点号标题被忽略；等长保留先出现记录；输出按 gene 排序。不要与能识别 `gene=` 的 `biohub fasta longest-transcript` 混淆。
 
 ### `extract-longest-pep`
 
 - **用途**：按历史 Ensembl 下载标题规则选取最长肽序列。
 - **调用**：`biohub run extract-longest-pep -f <proteins.fa> [-o <longest.fa>]`
 - **输入/输出**：把标题第一个 `-` 前内容视为分组名，输出该组最长序列，标题改为分组名。
-- **依赖/注意**：该规则适合原脚本数据，不是通用 Ensembl header 解析。输出顺序不保证，重复标题处理保留历史兼容逻辑。
+- **依赖/注意**：该规则适合原脚本数据，不是通用 Ensembl header 解析。输出按分组名排序，重复标题归入同一 `-` 前缀并选择最长序列。
 
 ### `extract-gene-family-info-alt`
 
@@ -565,21 +565,21 @@ workflow SHA256 与推荐容器；容器运行时应设置 `BIOHUB_CONTAINER_DIG
 - **用途**：对 BLAST-like 表按 query 汇总最大 identity。
 - **调用**：`biohub run get-best-idy -i <blast.tsv> [-o <best-identity.tsv>]`
 - **输入/输出**：使用第 1 列 query 和第 3 列 identity；输出两列 query、最大 identity。
-- **依赖/注意**：不输出 target，因此不能单独构造同源对；非法 identity 按 `0`。输出顺序不保证。
+- **依赖/注意**：不输出 target，因此不能单独构造同源对；非法 identity 按 `0`。输出按 query 排序。
 
 ### `get-best-hit-based-on-idy`
 
 - **用途**：按 BLAST6 第 12 列 bit score 为每个 query 保留整条最佳记录。
 - **调用**：`biohub run get-best-hit-based-on-idy -i <blast6.tsv> [-o <best.tsv>]`
 - **输入/输出**：输入至少 12 列；输出原始最佳行。
-- **依赖/注意**：名称保留历史叫法，但实际选择依据是第 12 列，不是第 3 列 identity；并列保留先出现行，输出顺序不保证。
+- **依赖/注意**：名称保留历史叫法，但实际选择依据是第 12 列，不是第 3 列 identity；并列保留先出现行，输出按 query 排序。
 
 ### `get-best-hit-genes`
 
 - **用途**：基于 BLAST6 第 11 列 e-value 统计双向最佳和次佳命中，并输出互惠最佳对的诊断字段。
 - **调用**：`biohub run get-best-hit-genes -i <combined-blast6.tsv> [-o <hits.tsv>]`
 - **输入/输出**：同一输入同时构建两个方向；输出 8 列，包括 gene、最佳 target、双方最佳/次佳 e-value 和次佳 target。
-- **依赖/注意**：要求制表符且至少 11 列。一个输入被视为无向候选集合；输出顺序不保证，使用前应确认与 BLAST 生成方式匹配。
+- **依赖/注意**：要求制表符且至少 11 列。一个输入被视为无向候选集合；输出按 gene 排序，使用前应确认与 BLAST 生成方式匹配。
 
 ### `merge-blastp-best-jcvi`
 
@@ -658,7 +658,7 @@ workflow SHA256 与推荐容器；容器运行时应设置 `BIOHUB_CONTAINER_DIG
 - **用途**：把历史 GeMoMa GFF 重新编号并展开 exon/CDS 语义。
 - **调用**：`biohub run convert-gemoma-gff3 -i <gemoma.gff> [-o <converted.gff3>]`
 - **输入/输出**：gene/mRNA 重新生成 `Plants<SEQ>geneNNNNN` 风格 ID；其他 feature 每行输出一个 exon 和一个保留原 feature 类型的 CDS-like 行。
-- **依赖/注意**：依赖 gene→mRNA→子记录顺序；会替换原属性与 ID。当前 Parent 的历史命名组合需在下游加载前用 GFF validator 和人工样例核对。
+- **依赖/注意**：依赖 gene→mRNA→子记录顺序；会替换原属性与 ID。mRNA `Parent` 引用实际生成的 gene `ID`；正式科研使用仍需通过 GFF validator 和代表数据领域复核。
 
 ### `convert-gene-annotation-contigs2chr-PASA`
 
@@ -700,7 +700,7 @@ workflow SHA256 与推荐容器；容器运行时应设置 `BIOHUB_CONTAINER_DIG
 - **用途**：另一版 GeMoMa 最长 CDS isoform 选择器。
 - **调用**：`biohub run filter-gemoma-as2 -i <gemoma.gff3> [-o <longest.gff3>]`
 - **输入/输出**：同样按 gene 块输出一个 mRNA；保留注释行。
-- **依赖/注意**：本版本 CDS 累计使用 `abs(end-start)`，少计每段 1 bp，与 `filter-gemoma-as` 不完全等价。用于发表前应选定一个实现并通过 golden output 固定。
+- **依赖/注意**：CDS 使用 GFF 闭区间长度 `abs(end-start)+1`，与 `filter-gemoma-as` 一致；并列保留先出现转录本。1 bp 和多片段 CDS 已纳入 golden 回归。
 
 ### `annotation-vcf`
 

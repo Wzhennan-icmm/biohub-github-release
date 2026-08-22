@@ -6,15 +6,54 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  checks: write
 
 jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes samtools
+      - run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+      - run: python tools/validate_recipes.py
+      - run: python tools/validate_release.py --release --tag "${GITHUB_REF_NAME}"
+      - run: python -m unittest discover -s tools/tests -v
+      - run: python tools/snakemake_smoke.py
+      - run: cargo fmt --check
+        working-directory: biohub-rs
+      - run: cargo clippy --locked --all-targets -- -D warnings
+        working-directory: biohub-rs
+      - run: BIOHUB_REQUIRE_EXTERNAL_GOLDENS=1 cargo test --locked
+        working-directory: biohub-rs
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: biohub-rs
+
+  domain-containers:
+    needs: readiness
+    uses: ./.github/workflows/domain-containers.yml
+    with:
+      image_tag: ${{ github.ref_name }}
+      publish: true
+    secrets: inherit
+
   binaries:
+    needs: readiness
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             asset: biohub-linux-x86_64
-          - os: macos-13
+          - os: macos-15-intel
             asset: biohub-macos-x86_64
           - os: macos-14
             asset: biohub-macos-aarch64
@@ -41,6 +80,17 @@ jobs:
           cp LICENSE NOTICE README.md CHANGELOG.md CITATION.cff CONTRIBUTING.md SECURITY.md dist/${{ matrix.asset }}/
           tar -C dist -czf ${{ matrix.asset }}.tar.gz ${{ matrix.asset }}
       - run: shasum -a 256 ${{ matrix.asset }}.tar.gz > ${{ matrix.asset }}.tar.gz.sha256
+      - name: Verify assembled archive
+        shell: bash
+        run: |
+          shasum -a 256 -c ${{ matrix.asset }}.tar.gz.sha256
+          mkdir verify
+          tar -C verify -xzf ${{ matrix.asset }}.tar.gz
+          verify/${{ matrix.asset }}/bin/biohub --version | grep -Fx "${GITHUB_REF_NAME#v}"
+          verify/${{ matrix.asset }}/bin/biohub catalog --format json > catalog.json
+          grep -F '"kind":"recipe"' catalog.json
+          test -f verify/${{ matrix.asset }}/share/biohub/docs/USER_GUIDE.zh-CN.md
+          test -f verify/${{ matrix.asset }}/share/biohub/docs/RECIPES.zh-CN.md
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -49,7 +99,7 @@ jobs:
             ${{ matrix.asset }}.tar.gz.sha256
 
   publish:
-    needs: binaries
+    needs: [binaries, domain-containers]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

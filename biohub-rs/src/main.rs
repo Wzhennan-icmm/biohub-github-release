@@ -97,6 +97,12 @@ fn open_writer(path: Option<&str>) -> Result<Box<dyn Write>> {
     }
 }
 
+fn sorted_string_keys<V>(map: &HashMap<String, V>) -> Vec<&String> {
+    let mut keys: Vec<&String> = map.keys().collect();
+    keys.sort();
+    keys
+}
+
 fn parse_required(args: &[String], idx: &mut usize, flag: &str) -> Result<String> {
     if *idx + 1 >= args.len() {
         return Err(format!("missing value for {flag}").into());
@@ -960,8 +966,9 @@ fn run_reciprocal(blast: &str, reverse: &str, output: Option<&str>) -> Result<i3
     let b = read_pairs(reverse)?;
     let mut out = open_writer(output)?;
 
-    for (q, t) in a {
-        if b.get(&t).is_some_and(|v| v == &q) {
+    for q in sorted_string_keys(&a) {
+        let t = &a[q];
+        if b.get(t).is_some_and(|v| v == q) {
             writeln!(out, "{q}\t{t}")?;
         }
     }
@@ -1944,8 +1951,8 @@ fn run_merge_two_txt(input: &str, output: Option<&str>) -> Result<i32> {
     }
 
     let mut out = open_writer(output)?;
-    for fields in best_map.values() {
-        writeln!(out, "{}", fields.join("\t"))?;
+    for key in sorted_string_keys(&best_map) {
+        writeln!(out, "{}", best_map[key].join("\t"))?;
     }
     Ok(0)
 }
@@ -1984,9 +1991,10 @@ fn run_compare_two_blast(primary: &str, reverse: &str, output: Option<&str>) -> 
     }
 
     let mut out = open_writer(output)?;
-    for (query, target) in primary_map {
-        if let Some(rev_target) = reverse_map.get(&target) {
-            if rev_target == &query {
+    for query in sorted_string_keys(&primary_map) {
+        let target = &primary_map[query];
+        if let Some(rev_target) = reverse_map.get(target) {
+            if rev_target == query {
                 writeln!(out, "{}\t{}", query, target)?;
             }
         }
@@ -2023,8 +2031,8 @@ fn run_get_best_idy(input: &str, output: Option<&str>) -> Result<i32> {
     }
 
     let mut out = open_writer(output)?;
-    for (query, idy) in best_map {
-        writeln!(out, "{query}\t{idy}")?;
+    for query in sorted_string_keys(&best_map) {
+        writeln!(out, "{query}\t{}", best_map[query])?;
     }
     Ok(0)
 }
@@ -2061,8 +2069,8 @@ fn run_get_best_hit_based_on_idy(input: &str, output: Option<&str>) -> Result<i3
     }
 
     let mut out = open_writer(output)?;
-    for line in best_line.values() {
-        writeln!(out, "{line}")?;
+    for query in sorted_string_keys(&best_line) {
+        writeln!(out, "{}", best_line[query])?;
     }
     Ok(0)
 }
@@ -2099,28 +2107,36 @@ fn run_get_best_hit_genes(input: &str, output: Option<&str>) -> Result<i32> {
             (gene_a.to_string(), gene_b.to_string()),
             (gene_b.to_string(), gene_a.to_string()),
         ] {
-            let state = e_dict.entry(query.clone()).or_insert(BestHitState {
-                best_score: f64::INFINITY,
-                best_raw: "100".to_string(),
-                best_target: "Noop".to_string(),
-                second_score: 100.0,
-                second_target: "Noop".to_string(),
-            });
-            if evalue < state.best_score {
-                state.second_score = state.best_score;
-                state.second_target = state.best_target.clone();
-                state.best_score = evalue;
-                state.best_raw = cols[10].to_string();
-                state.best_target = target.clone();
-            } else if evalue < state.second_score {
-                state.second_score = evalue;
-                state.second_target = target.clone();
+            match e_dict.entry(query.clone()) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(BestHitState {
+                        best_score: evalue,
+                        best_raw: cols[10].to_string(),
+                        best_target: target.clone(),
+                        second_score: 100.0,
+                        second_target: "Noop".to_string(),
+                    });
+                }
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let state = entry.get_mut();
+                    if evalue < state.best_score {
+                        state.second_score = state.best_score;
+                        state.second_target = state.best_target.clone();
+                        state.best_score = evalue;
+                        state.best_raw = cols[10].to_string();
+                        state.best_target = target.clone();
+                    } else if evalue < state.second_score {
+                        state.second_score = evalue;
+                        state.second_target = target.clone();
+                    }
+                }
             }
         }
     }
 
     let mut out = open_writer(output)?;
-    for (gene, state) in &e_dict {
+    for gene in sorted_string_keys(&e_dict) {
+        let state = &e_dict[gene];
         if let Some(best_target_state) = e_dict.get(&state.best_target) {
             if best_target_state.best_target == *gene {
                 writeln!(
@@ -2343,8 +2359,8 @@ fn run_merge_gos(swissprot: &str, nr: &str, trembl: &str, output: Option<&str>) 
     load_go(trembl, &mut go_map);
 
     let mut out = open_writer(output)?;
-    for (gene, gos) in go_map {
-        for go_name in gos {
+    for gene in sorted_string_keys(&go_map) {
+        for go_name in &go_map[gene] {
             writeln!(out, "{gene}\t{go_name}")?;
         }
     }
@@ -2447,10 +2463,10 @@ fn run_genome_gc(input: &str, output: Option<&str>) -> Result<i32> {
     while reader.read_line(&mut row)? > 0 {
         let raw = row.trim_end_matches(['\n', '\r']).to_string();
         row.clear();
+        if raw.starts_with('>') {
+            continue;
+        }
         for ch in raw.chars() {
-            if ch == '>' {
-                continue;
-            }
             match ch {
                 'G' | 'g' | 'C' | 'c' => {
                     gc_count += 1;
@@ -2528,8 +2544,8 @@ fn run_get_the_longest_seq(input: &str, output: Option<&str>) -> Result<i32> {
         }
     }
 
-    for (gene, trans) in selected {
-        writeln!(out, "{trans}\t{gene}")?;
+    for gene in sorted_string_keys(&selected) {
+        writeln!(out, "{}\t{gene}", selected[gene])?;
     }
     Ok(0)
 }
@@ -2550,12 +2566,12 @@ fn run_extract_longest_pep_from_ensembl_download(input: &str, output: Option<&st
         }
         if let Some(rest) = raw.strip_prefix('>') {
             if !current_name.is_empty() {
-                let key = if records.contains_key(rest) {
-                    let v = format!("{rest}-{dup_count}");
+                let key = if records.contains_key(&current_name) {
+                    let v = format!("{current_name}-{dup_count}");
                     dup_count += 1;
                     v
                 } else {
-                    rest.to_string()
+                    current_name.clone()
                 };
                 records.insert(key, vec![current_seq.clone()]);
             }
@@ -2590,9 +2606,9 @@ fn run_extract_longest_pep_from_ensembl_download(input: &str, output: Option<&st
     }
 
     let mut out = open_writer(output)?;
-    for (name, (seq, _)) in longest {
+    for name in sorted_string_keys(&longest) {
         writeln!(out, ">{name}")?;
-        writeln!(out, "{seq}")?;
+        writeln!(out, "{}", longest[name].0)?;
     }
     Ok(0)
 }
@@ -2806,6 +2822,7 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
     let mut gene_id = 1usize;
     let mut mrna_id = 1usize;
     let mut exon_id = 1usize;
+    let mut current_gene = String::new();
     let mut current_mrna = String::new();
 
     while reader.read_line(&mut line)? > 0 {
@@ -2825,6 +2842,7 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
                 let g_id = format!("Plants{}gene{gene_id:05}", fields[0].to_uppercase());
                 let g_name = format!("Plant{gene_id:05}");
                 writeln!(out, "{}\tID={g_id};Name={g_name}", fields[..8].join("\t"))?;
+                current_gene = g_id;
                 current_mrna.clear();
                 gene_id += 1;
                 mrna_id = 1;
@@ -2840,9 +2858,9 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
                 let m_name = format!("Plant{:05}.{}", gene_id - 1, mrna_id);
                 writeln!(
                     out,
-                    "{}\tID={m_id};Parent=Plant{:05};Name={m_name}",
+                    "{}\tID={m_id};Parent={};Name={m_name}",
                     fields[..8].join("\t"),
-                    gene_id - 1
+                    current_gene
                 )?;
                 current_mrna = m_id;
                 mrna_id += 1;
@@ -3310,7 +3328,7 @@ fn run_filter_gemoma_as2(input_gff: &str, output: Option<&str>) -> Result<i32> {
         if feature == "CDS" && cols.len() > 4 {
             let s = cols[3].parse::<i64>().unwrap_or(0);
             let e = cols[4].parse::<i64>().unwrap_or(0);
-            current_len += (e - s).abs();
+            current_len += (e - s).abs() + 1;
         }
         current_lines.push(raw);
     }
@@ -3382,9 +3400,10 @@ fn run_get_best_hit_by_score(
     }
 
     let mut out = open_writer(output)?;
-    for (q, (_score, t)) in qbest {
-        if let Some((_r, rev_q)) = rbest.get(&t) {
-            if rev_q == &q {
+    for q in sorted_string_keys(&qbest) {
+        let t = &qbest[q].1;
+        if let Some((_r, rev_q)) = rbest.get(t) {
+            if rev_q == q {
                 writeln!(out, "{q}\t{t}")?;
             }
         }
@@ -3456,9 +3475,10 @@ fn run_get_best_hit_by_score_one_file(
         .unwrap_or(&format!("{out_prefix}.idy.txt"))
         .to_string();
     let mut out = BufWriter::new(File::create(out_file)?);
-    for (q, (_s, t, idy)) in qbest {
-        if let Some((_score, rev_q)) = rbest.get(&t) {
-            if rev_q == &q {
+    for q in sorted_string_keys(&qbest) {
+        let (_score, t, idy) = &qbest[q];
+        if let Some((_score, rev_q)) = rbest.get(t) {
+            if rev_q == q {
                 writeln!(out, "{q}\t{t}\t{idy}")?;
             }
         }
@@ -3472,12 +3492,15 @@ fn run_get_best_hit_from_blast(
     output: Option<&str>,
 ) -> Result<i32> {
     let mut all_map: HashMap<String, Vec<String>> = HashMap::new();
-    for entry in fs::read_dir(expand_path(path_dir))? {
-        let entry = entry?;
-        if !entry.path().is_file() {
+    let mut input_files: Vec<PathBuf> = fs::read_dir(expand_path(path_dir))?
+        .map(|entry| entry.map(|item| item.path()))
+        .collect::<std::result::Result<Vec<_>, io::Error>>()?;
+    input_files.sort();
+    for path in input_files {
+        if !path.is_file() {
             continue;
         }
-        let file = entry.path().to_string_lossy().to_string();
+        let file = path.to_string_lossy().to_string();
         let mut reader = open_reader(&file)?;
         let mut row = String::new();
         while reader.read_line(&mut row)? > 0 {
@@ -3523,7 +3546,8 @@ fn run_get_best_hit_from_blast(
     }
 
     let mut to_remove: HashSet<String> = HashSet::new();
-    let keys: Vec<String> = filtered.keys().cloned().collect();
+    let mut keys: Vec<String> = filtered.keys().cloned().collect();
+    keys.sort();
     for k in keys {
         if to_remove.contains(&k) {
             continue;
@@ -3541,8 +3565,8 @@ fn run_get_best_hit_from_blast(
     }
 
     let mut out = open_writer(output)?;
-    for (q, ts) in filtered {
-        writeln!(out, "{q}\t{}", ts.join("\t"))?;
+    for q in sorted_string_keys(&filtered) {
+        writeln!(out, "{q}\t{}", filtered[q].join("\t"))?;
     }
     Ok(0)
 }
@@ -3594,6 +3618,7 @@ fn run_extract_gene_family_info(
 
     let mut ex_reader = open_reader(expr_file)?;
     let _ = ex_reader.read_line(&mut expr_row)?;
+    expr_row.clear();
     while ex_reader.read_line(&mut expr_row)? > 0 {
         let raw = expr_row.trim_end_matches(['\n', '\r']).to_string();
         expr_row.clear();
@@ -3640,17 +3665,21 @@ fn run_extract_gene_family_info(
         }
     }
 
-    for (family, lines) in part {
+    for family in sorted_string_keys(&part) {
         let out_path = Path::new(out_dir).join(format!("{family}.partial.geneExpression.txt"));
         let mut out = BufWriter::new(File::create(out_path)?);
+        let mut lines = part[family].clone();
+        lines.sort();
         for l in lines {
             writeln!(out, "{l}")?;
         }
     }
 
-    for (family, lines) in full {
+    for family in sorted_string_keys(&full) {
         let out_path = Path::new(out_dir).join(format!("{family}.fullenth.geneExpression.txt"));
         let mut out = BufWriter::new(File::create(out_path)?);
+        let mut lines = full[family].clone();
+        lines.sort();
         for l in lines {
             writeln!(out, "{l}")?;
         }
@@ -3717,6 +3746,7 @@ fn run_extract_gene_family_matrix(
 
     let mut expr_reader = open_reader(expr_file)?;
     let _ = expr_reader.read_line(&mut r1)?;
+    r1.clear();
     while expr_reader.read_line(&mut r1)? > 0 {
         let raw = r1.trim_end_matches(['\n', '\r']).to_string();
         r1.clear();
@@ -3741,7 +3771,9 @@ fn run_extract_gene_family_matrix(
     }
 
     let mut out = open_writer(output.or(Some("final.matrix.txt")))?;
-    for (family, genes) in family_genes {
+    for family in sorted_string_keys(&family_genes) {
+        let mut genes = family_genes[family].clone();
+        genes.sort();
         if genes.is_empty() {
             continue;
         }
@@ -3907,6 +3939,11 @@ fn run_merge_two_end_bam_internal(
     if !status.success() {
         return Err("samtools view failed".into());
     }
+
+    out1_s.flush()?;
+    out2_s.flush()?;
+    drop(out1_s);
+    drop(out2_s);
 
     let st1 = Command::new("samtools")
         .args(["view", "-bS", r1_tmp.to_string_lossy().as_ref(), "-o", out1])
@@ -4158,8 +4195,9 @@ fn run_get_longest_transcript(input: &str, output: Option<&str>) -> Result<i32> 
     }
 
     let mut out = open_writer(output)?;
-    for (_, (header, _)) in by_gene {
-        if let Some(seq) = seq_by_header.get(&header) {
+    for gene in sorted_string_keys(&by_gene) {
+        let header = &by_gene[gene].0;
+        if let Some(seq) = seq_by_header.get(header) {
             writeln!(out, ">{header}")?;
             writeln!(out, "{seq}")?;
         }
@@ -4524,9 +4562,9 @@ fn run_get_four_degenerate_sites(pal2nal_dir: &str, out_dir: &str) -> Result<i32
             sample_site.entry(sample).or_default();
         }
 
-        for (sample, entries) in sample_records {
-            let seq = entries.as_str();
-            let acc = sample_site.get_mut(&sample).unwrap();
+        for sample in sorted_string_keys(&sample_records) {
+            let seq = sample_records[sample].as_str();
+            let acc = sample_site.get_mut(sample).unwrap();
             for pos in &all_sites {
                 if *pos < seq.len() {
                     acc.push(seq.chars().nth(*pos).unwrap_or('N'));
@@ -4538,9 +4576,9 @@ fn run_get_four_degenerate_sites(pal2nal_dir: &str, out_dir: &str) -> Result<i32
     let mut out = BufWriter::new(File::create(
         Path::new(out_dir).join("fourDegenerateSite.fasta"),
     )?);
-    for (sample, seq) in sample_site {
+    for sample in sorted_string_keys(&sample_site) {
         writeln!(out, ">{sample}")?;
-        writeln!(out, "{seq}")?;
+        writeln!(out, "{}", sample_site[sample])?;
     }
 
     let mut stat = BufWriter::new(File::create(

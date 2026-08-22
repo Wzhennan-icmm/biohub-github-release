@@ -1,0 +1,49 @@
+inventory_id	target	review_class	status	evidence	reviewer	reviewed_on	note
+003	command:extract-pasa-results	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Synthetic block-selection golden
+004	command:merge-fpkm-file	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Sorted matrix and profile golden
+005	command:save-go	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	GO extraction golden
+006	command:zhouxiaoxuan-mergexls	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Key normalization golden
+008	command:change-scaffolds-name-fasta	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	FASTA mapping golden
+009	command:change-seqname-for-fasta	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Alignment directory golden
+010	command:compare-as-and-noAS	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	AS filtering golden
+011	command:compare-busco-results	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	BUSCO set difference golden
+012	command:compare-two-blast	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Reciprocal pair golden
+013	command:convert-3line2one	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Three-row depth golden
+014	command:convert-gemoma-gff3	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Synthetic GFF golden exists; domain approval required
+015	command:convert-gene-annotation-contigs2chr-PASA	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Strand boundary golden exists; domain approval required
+016	command:convert-gene-annotation-scaffold2chr-nextgenomics	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Split-scaffold review required
+017	command:extract-gene-family-info	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Full and partial expression golden
+018	command:extract-gene-family-matrix	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Coverage matrix golden
+019	command:extract-longest-pep	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Duplicate-header longest peptide golden
+020	command:filter-gemoma-as	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Inclusive CDS length golden
+021	command:filter-gemoma-as2	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Inclusive single-base CDS regression
+022	command:filter-gff-by-id	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	First-attribute golden
+023	command:filter-gtf-ctg	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Contig exclusion golden
+024	command:filter-seq-by-length	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Inclusive threshold golden
+026	command:genome-gc	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	FASTA-header exclusion regression
+027	command:get-best-hit-based-on-idy	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Best score row golden
+028	command:get-best-hit-by-score	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Two-file reciprocal score golden
+029	command:get-best-hit-by-score-one-file	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	One-file score and identity golden
+030	command:get-best-hit-from-blast	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Cross-species synthetic golden exists; domain approval required
+031	command:get-best-hit-genes	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Best and second e-value regression
+032	command:get-best-idy	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Best identity golden
+033	command:get-diff-sites-from-orthology	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Codon-position golden exists; domain approval required
+034	command:get-four-degenerate-sites	domain	pending	biohub-rs/tests/publication_goldens.rs	-	-	Invariant-codon golden exists; domain approval required
+036	command:get-the-longest-seq	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Transcript grouping golden
+037	command:merge-gos	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	GO merge and EC exclusion golden
+038	command:merge-blastp-best-jcvi	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	JCVI matrix padding golden
+039	command:merge-two-end-bam	external	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Samtools paired-record golden
+040	command:merge-two-end-bam1	external	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Samtools compatibility golden
+041	command:merge-two-end-bam-forMGI	external	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	MGI suffix-normalization golden
+042	command:merge-two-txt	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Maximum score deduplication golden
+043	recipe:comparative-orthology-codon	recipe	pending	tools/snakemake_smoke.py	-	-	Representative biological codon workflow review required
+044	command:orthogenes	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Stable member deduplication golden
+045	command:plot-depth-pandepth	visual	pending	biohub-rs/tests/publication_goldens.rs	-	-	Exact automated fingerprint exists; visual approval required
+046	command:plot-depth-pandepth2	visual	pending	biohub-rs/tests/publication_goldens.rs	-	-	Exact automated fingerprint exists; visual approval required
+047	command:plot-mosdepth-point	visual	pending	biohub-rs/tests/publication_goldens.rs	-	-	Exact automated fingerprint exists; visual approval required
+048	command:trim-ttaggg-fastq	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Head and tail motif golden
+049	recipe:microbiome-rda	recipe	pending	tools/snakemake_smoke.py	-	-	Representative biological RDA review required
+050	recipe:microbiome-rda	recipe	pending	tools/snakemake_smoke.py	-	-	Partial RDA and permutation review required
+053	recipe:functional-enrichment	recipe	pending	tools/snakemake_smoke.py	-	-	Foreground background and adjusted-p review required
+067	direct:psmc merge	golden	automated	biohub-rs/tests/publication_goldens.rs	ci	2026-08-22	Sorted sample trajectory golden
+072	recipe:rnaseq-deseq2	recipe	pending	tools/snakemake_smoke.py	-	-	Representative count design contrast review required

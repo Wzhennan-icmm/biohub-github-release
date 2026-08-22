@@ -28,7 +28,7 @@ DISALLOWED_R = (
     "setwd(",
     'source("http',
     "source('http",
-    "/Users/",
+    "/" "Users/",
 )
 
 
@@ -123,7 +123,7 @@ def validate_recipe_guide(root: Path, catalog: list[dict[str, str]]) -> None:
     guide = guide_path.read_text(encoding="utf-8")
     if "文档版本：0.4.0" not in guide:
         raise ValueError("recipe guide version does not match release")
-    for private_marker in ("/Users/", "/mnt/kobe/"):
+    for private_marker in ("/" "Users/", "/mnt/" "kobe/"):
         if private_marker in guide:
             raise ValueError(f"private path in recipe guide: {private_marker}")
 

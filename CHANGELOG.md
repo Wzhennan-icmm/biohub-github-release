@@ -27,6 +27,14 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
   and execute four synthetic low-risk workflows in image CI.
 - Add a publication-oriented Chinese recipe manual covering every config field,
   input contract, output, recovery path, and reporting checklist.
+- Add deterministic publication goldens for migrated commands, external BAM
+  fixtures, visual fingerprints, and a non-bypassable release evidence gate.
+- Fix FASTA GC header counting, longest-peptide record attribution, GFF Parent
+  references, inclusive CDS lengths, first-row expression loss, and best-hit
+  sentinel handling.
+- Make map-backed outputs deterministic and reject stale local launcher binaries.
+- Gate GitHub Release on validation readiness, three native archives, and five
+  tested immutable domain containers.
 
 ## 0.3.0 - Development snapshot
 

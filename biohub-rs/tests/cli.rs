@@ -93,6 +93,25 @@ fn unknown_command_returns_failure() {
 }
 
 #[test]
+fn launcher_rejects_stale_binary_versions() {
+    let launcher = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("run-biohub.sh");
+    let output = Command::new("bash")
+        .arg(launcher)
+        .arg("--version")
+        .output()
+        .expect("run launcher");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("version is UTF-8"),
+        format!("{}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn chinese_user_guide_documents_every_catalog_command_once() {
     let ids: Vec<&str> = SCRIPT_CATALOG
         .lines()
@@ -121,8 +140,9 @@ fn readme_links_chinese_user_guide_without_local_paths() {
     assert!(CHINESE_USER_GUIDE.contains("文档版本：0.4.0"));
     assert!(CHINESE_USER_GUIDE.contains("RECIPES.zh-CN.md"));
     assert!(CHINESE_RECIPE_GUIDE.contains("文档版本：0.4.0"));
-    assert!(!CHINESE_USER_GUIDE.contains("/Users/"));
-    assert!(!CHINESE_RECIPE_GUIDE.contains("/Users/"));
+    let private_home_marker = ["/", "Users/"].concat();
+    assert!(!CHINESE_USER_GUIDE.contains(&private_home_marker));
+    assert!(!CHINESE_RECIPE_GUIDE.contains(&private_home_marker));
 }
 
 #[test]

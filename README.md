@@ -126,9 +126,19 @@ cargo clippy --locked -- -D warnings
 cargo test --locked
 cd ..
 python3 tools/validate_recipes.py
+python3 tools/validate_release.py
 python3 -m unittest discover -s tools/tests -v
 python3 tools/snakemake_smoke.py
 ```
+
+Formal release additionally runs:
+
+```bash
+python3 tools/validate_release.py --release --tag v0.4.0
+```
+
+This gate rejects unsigned domain, recipe, and visual reviews; see the
+[validation register](validation/README.md).
 
 See the [Chinese functional manual](docs/USER_GUIDE.zh-CN.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md),

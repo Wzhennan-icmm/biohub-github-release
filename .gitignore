@@ -1,5 +1,6 @@
 /target/
 biohub-rs/target/
+.venv-ci/
 __pycache__/
 *.pyc
 *.pyo

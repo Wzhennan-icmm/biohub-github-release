@@ -1,9 +1,28 @@
 name: Domain containers
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: Image tag or release ref
+        required: true
+        type: string
+      publish:
+        description: Push immutable images to GHCR
+        required: true
+        type: boolean
   workflow_dispatch:
-  push:
-    tags: ["v*"]
+    inputs:
+      image_tag:
+        description: Image tag for preflight build
+        required: true
+        default: dev
+        type: string
+      publish:
+        description: Push images to GHCR
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -32,16 +51,15 @@ jobs:
       - name: Select image tag
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            echo "BIOHUB_IMAGE_TAG=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-          else
-            echo "BIOHUB_IMAGE_TAG=dev" >> "$GITHUB_ENV"
-          fi
+          raw_tag="${{ inputs.image_tag }}"
+          image_tag="${raw_tag#v}"
+          test -n "$image_tag"
+          echo "BIOHUB_IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
       - name: Build
         run: >-
           docker build -f containers/Dockerfile.domain
           --build-arg ENVIRONMENT=${{ matrix.environment }}
-          --tag ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG} .
+          --tag "ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}" .
       - name: Smoke test
         run: |
           image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
@@ -76,18 +94,18 @@ jobs:
           docker run --rm -v "$PWD:/repo:ro" --entrypoint python "$image" \
             /repo/tools/snakemake_smoke.py --root /repo --snakemake snakemake \
             --biohub biohub --execute-safe "${recipe_args[@]}"
-      - if: github.ref_type == 'tag'
+      - if: inputs.publish
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish immutable release tag
-        if: github.ref_type == 'tag'
+        if: inputs.publish
         run: >-
-          docker push ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}
+          docker push "ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
       - name: Record published digest
-        if: github.ref_type == 'tag'
+        if: inputs.publish
         shell: bash
         run: |
           image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
