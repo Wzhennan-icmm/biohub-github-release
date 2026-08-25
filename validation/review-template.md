@@ -6,8 +6,9 @@
 - Review date (`YYYY-MM-DD`):
 - Decision (`approved` or `rejected`):
 - BioHub commit:
-- Deidentified input SHA256:
-- Expected output SHA256:
+- Evidence pack and schema version:
+- Input-manifest SHA256:
+- Output-manifest SHA256:
 - Reference software and version:
 - Reference command and parameters:
 - Numeric or visual acceptance tolerance:

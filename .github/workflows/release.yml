@@ -3,17 +3,52 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Version tag to preflight without publishing
+        required: true
+        default: v0.4.0
+        type: string
 
 permissions:
   contents: write
   packages: write
   checks: write
 
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  release-context:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+    steps:
+      - name: Resolve and validate release tag
+        id: resolve
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            test "${GITHUB_REF}" = "refs/heads/main"
+            release_tag="${DISPATCH_TAG}"
+          fi
+          [[ "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "Release context: ${release_tag}; event=${GITHUB_EVENT_NAME}" >> "${GITHUB_STEP_SUMMARY}"
+
   readiness:
+    needs: release-context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -23,8 +58,24 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install --yes samtools
       - run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+      - name: Verify annotated tag targets current main
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.release-context.outputs.release_tag }}
+        run: |
+          test "$(git cat-file -t "${RELEASE_TAG}")" = "tag"
+          git fetch origin main
+          test "$(git rev-list -n 1 "${RELEASE_TAG}")" = "$(git rev-parse origin/main)"
+      - name: Validate Citation File Format in isolated environment
+        run: |
+          python -m venv .venv-cff
+          .venv-cff/bin/python -m pip install --disable-pip-version-check -r requirements-cff.txt
+          .venv-cff/bin/cffconvert --validate
       - run: python tools/validate_recipes.py
-      - run: python tools/validate_release.py --release --tag "${GITHUB_REF_NAME}"
+      - run: >-
+          python tools/validate_release.py --release
+          --tag "${{ needs.release-context.outputs.release_tag }}"
       - run: python -m unittest discover -s tools/tests -v
       - run: python tools/snakemake_smoke.py
       - run: cargo fmt --check
@@ -39,16 +90,17 @@ jobs:
           working-directory: biohub-rs
 
   domain-containers:
-    needs: readiness
+    needs: [release-context, readiness]
     uses: ./.github/workflows/domain-containers.yml
     with:
-      image_tag: ${{ github.ref_name }}
-      publish: true
+      image_tag: ${{ needs.release-context.outputs.release_tag }}
+      publish: ${{ github.event_name == 'push' }}
     secrets: inherit
 
   binaries:
-    needs: readiness
+    needs: [release-context, readiness]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -61,11 +113,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Verify tag matches crate version
+      - name: Verify release context matches crate version
         shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.release-context.outputs.release_tag }}
         run: |
           crate_version=$(awk -F '"' '/^version =/ {print $2; exit}' biohub-rs/Cargo.toml)
-          test "v${crate_version}" = "${GITHUB_REF_NAME}"
+          test "v${crate_version}" = "${RELEASE_TAG}"
       - run: cargo build --locked --release
         working-directory: biohub-rs
       - name: Assemble release archive
@@ -77,20 +131,26 @@ jobs:
           cp -R recipes dist/${{ matrix.asset }}/share/biohub/
           cp -R compat dist/${{ matrix.asset }}/share/biohub/
           cp -R docs examples dist/${{ matrix.asset }}/share/biohub/
+          cp -R tools validation dist/${{ matrix.asset }}/share/biohub/
+          cp requirements-ci.txt requirements-cff.txt dist/${{ matrix.asset }}/share/biohub/
           cp LICENSE NOTICE README.md CHANGELOG.md CITATION.cff CONTRIBUTING.md SECURITY.md dist/${{ matrix.asset }}/
           tar -C dist -czf ${{ matrix.asset }}.tar.gz ${{ matrix.asset }}
       - run: shasum -a 256 ${{ matrix.asset }}.tar.gz > ${{ matrix.asset }}.tar.gz.sha256
       - name: Verify assembled archive
         shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.release-context.outputs.release_tag }}
         run: |
           shasum -a 256 -c ${{ matrix.asset }}.tar.gz.sha256
           mkdir verify
           tar -C verify -xzf ${{ matrix.asset }}.tar.gz
-          verify/${{ matrix.asset }}/bin/biohub --version | grep -Fx "${GITHUB_REF_NAME#v}"
+          verify/${{ matrix.asset }}/bin/biohub --version | grep -Fx "${RELEASE_TAG#v}"
           verify/${{ matrix.asset }}/bin/biohub catalog --format json > catalog.json
           grep -F '"kind":"recipe"' catalog.json
           test -f verify/${{ matrix.asset }}/share/biohub/docs/USER_GUIDE.zh-CN.md
           test -f verify/${{ matrix.asset }}/share/biohub/docs/RECIPES.zh-CN.md
+          test -f verify/${{ matrix.asset }}/share/biohub/tools/validation_review.py
+          test -f verify/${{ matrix.asset }}/share/biohub/validation/packs/statistics/pack.json
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -98,8 +158,41 @@ jobs:
             ${{ matrix.asset }}.tar.gz
             ${{ matrix.asset }}.tar.gz.sha256
 
+  preflight-summary:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [release-context, binaries, domain-containers]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Verify preflight artifact set
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.release-context.outputs.release_tag }}
+        run: |
+          archive_count=$(find dist -type f -name 'biohub-*.tar.gz' | wc -l | tr -d ' ')
+          checksum_count=$(find dist -type f -name 'biohub-*.tar.gz.sha256' | wc -l | tr -d ' ')
+          explicit_count=$(find dist -type f -name '*.explicit.txt' | wc -l | tr -d ' ')
+          image_id_count=$(find dist -type f -name '*.local-image-id.txt' | wc -l | tr -d ' ')
+          test "${archive_count}" = "3"
+          test "${checksum_count}" = "3"
+          test "${explicit_count}" = "5"
+          test "${image_id_count}" = "5"
+          {
+            echo "## Release preflight passed"
+            echo
+            echo "- Tag candidate: \`${RELEASE_TAG}\`"
+            echo "- Native archives: ${archive_count}"
+            echo "- SHA256 files: ${checksum_count}"
+            echo "- Domain environment exports: ${explicit_count}"
+            echo "- Local container image IDs: ${image_id_count}"
+            echo "- Published images/releases: none"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   publish:
-    needs: [binaries, domain-containers]
+    if: ${{ github.event_name == 'push' }}
+    needs: [release-context, binaries, domain-containers]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -107,5 +200,6 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.release-context.outputs.release_tag }}
           generate_release_notes: true
           files: dist/**/*

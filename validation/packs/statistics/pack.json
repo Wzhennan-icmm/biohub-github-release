@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "pack_id": "statistics",
+  "title": "RDA, over-representation analysis, and DESeq2 recipes",
+  "inventory_ids": ["049", "050", "053", "072"],
+  "fixture_license": "CC0-1.0 synthetic fixture",
+  "r_packages": ["vegan", "DESeq2"],
+  "acceptance": [
+    "Enrichment background, term, foreground, and overlap counts match exactly; pvalue and padj absolute error is at most 1e-12.",
+    "DESeq2 identifiers and categorical fields match exactly; numeric error is at most max(1e-8, 1e-6 * abs(reference)).",
+    "RDA inertia/eigen summaries have relative error at most 1e-6; ordination axes permit sign reversal and require absolute correlation at least 0.999999.",
+    "RDA permutation p-values and tested terms match reference exactly within 1e-12."
+  ],
+  "manual_checks": [
+    "Confirm Hellinger transform, constraints, Condition(batch), seed, and permutation count answer stated RDA question.",
+    "Confirm enrichment foreground/background universe and set_source BH correction scope.",
+    "Confirm DESeq2 design ~ batch + condition, treated/control contrast, normalization, independent filtering, and significance definition."
+  ],
+  "reference_commands": [
+    "Rscript recipes/microbiome-rda/run_rda.R <resolved arguments in commands.tsv/config.resolved.json>",
+    "Rscript recipes/functional-enrichment/run_enrichment.R <resolved arguments in commands.tsv/config.resolved.json>",
+    "Rscript recipes/rnaseq-deseq2/run_deseq2.R <resolved arguments in commands.tsv/config.resolved.json>",
+    "python3 tools/validation_review.py verify --pack statistics"
+  ],
+  "steps": [
+    {
+      "id": "049-050-microbiome-rda",
+      "runner": "recipe",
+      "recipe": "microbiome-rda",
+      "config": "configs/microbiome-rda.json",
+      "outputs": [
+        "results/model_summary.tsv",
+        "results/features_audit.tsv",
+        "results/permutation_overall.tsv",
+        "results/permutation_terms.tsv",
+        "results/permutation_axes.tsv",
+        "results/site_scores.tsv",
+        "results/feature_scores.tsv",
+        "results/biplot_scores.tsv",
+        "report/rda.pdf",
+        "logs/rda.log"
+      ],
+      "checks": [
+        {
+          "type": "tsv_numeric",
+          "path": "results/model_summary.tsv",
+          "expected": "expected/049-050-microbiome-rda/model_summary.tsv",
+          "key_columns": ["metric"],
+          "numeric_columns": ["value"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 1e-6
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/features_audit.tsv",
+          "expected": "expected/049-050-microbiome-rda/features_audit.tsv",
+          "key_columns": ["feature_id"],
+          "exact_columns": ["retained"],
+          "numeric_columns": ["prevalence", "total_abundance"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 0.0
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/permutation_overall.tsv",
+          "expected": "expected/049-050-microbiome-rda/permutation_overall.tsv",
+          "key_columns": ["test", "row"],
+          "exact_columns": ["Df"],
+          "numeric_columns": ["Variance", "F", "Pr(>F)"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 1e-6,
+          "tolerances": {"Pr(>F)": {"absolute": 1e-12, "relative": 0.0}}
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/permutation_terms.tsv",
+          "expected": "expected/049-050-microbiome-rda/permutation_terms.tsv",
+          "key_columns": ["test", "row"],
+          "exact_columns": ["Df"],
+          "numeric_columns": ["Variance", "F", "Pr(>F)"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 1e-6,
+          "tolerances": {"Pr(>F)": {"absolute": 1e-12, "relative": 0.0}}
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/permutation_axes.tsv",
+          "expected": "expected/049-050-microbiome-rda/permutation_axes.tsv",
+          "key_columns": ["test", "row"],
+          "exact_columns": ["Df"],
+          "numeric_columns": ["Variance", "F", "Pr(>F)"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 1e-6,
+          "tolerances": {"Pr(>F)": {"absolute": 1e-12, "relative": 0.0}}
+        },
+        {
+          "type": "tsv_sign_invariant",
+          "path": "results/site_scores.tsv",
+          "expected": "expected/049-050-microbiome-rda/site_scores.tsv",
+          "key_columns": ["id"],
+          "numeric_columns": ["RDA1", "RDA2"],
+          "minimum_absolute_correlation": 0.999999
+        },
+        {
+          "type": "tsv_sign_invariant",
+          "path": "results/feature_scores.tsv",
+          "expected": "expected/049-050-microbiome-rda/feature_scores.tsv",
+          "key_columns": ["id"],
+          "numeric_columns": ["RDA1", "RDA2"],
+          "minimum_absolute_correlation": 0.999999
+        },
+        {
+          "type": "tsv_sign_invariant",
+          "path": "results/biplot_scores.tsv",
+          "expected": "expected/049-050-microbiome-rda/biplot_scores.tsv",
+          "key_columns": ["id"],
+          "numeric_columns": ["RDA1", "RDA2"],
+          "minimum_absolute_correlation": 0.999999
+        }
+      ]
+    },
+    {
+      "id": "053-functional-enrichment",
+      "runner": "recipe",
+      "recipe": "functional-enrichment",
+      "config": "configs/functional-enrichment.json",
+      "outputs": [
+        "results/enrichment_all.tsv",
+        "results/enrichment_significant.tsv",
+        "results/set_summary.tsv",
+        "report/enrichment.pdf",
+        "logs/enrichment.log"
+      ],
+      "checks": [
+        {
+          "type": "tsv_numeric",
+          "path": "results/enrichment_all.tsv",
+          "expected": "expected/053-functional-enrichment/enrichment_all.tsv",
+          "key_columns": ["set_id", "source", "term_id"],
+          "exact_columns": [
+            "term_name", "background_size", "term_size", "foreground_size",
+            "overlap_size", "significant", "overlap_genes"
+          ],
+          "numeric_columns": ["fold_enrichment", "pvalue", "padj"],
+          "absolute_tolerance": 1e-12,
+          "relative_tolerance": 0.0
+        },
+        {
+          "type": "exact",
+          "path": "results/set_summary.tsv",
+          "expected": "expected/053-functional-enrichment/set_summary.tsv"
+        }
+      ]
+    },
+    {
+      "id": "072-rnaseq-deseq2",
+      "runner": "recipe",
+      "recipe": "rnaseq-deseq2",
+      "config": "configs/rnaseq-deseq2.json",
+      "outputs": [
+        "results/differential_expression.tsv",
+        "results/contrast_summary.tsv",
+        "results/normalized_counts.tsv",
+        "results/sample_qc.tsv",
+        "report/sample_pca.pdf",
+        "logs/deseq2.log"
+      ],
+      "checks": [
+        {
+          "type": "tsv_numeric",
+          "path": "results/differential_expression.tsv",
+          "expected": "expected/072-rnaseq-deseq2/differential_expression.tsv",
+          "key_columns": ["contrast_id", "gene_id"],
+          "exact_columns": ["factor", "numerator", "denominator", "significant"],
+          "numeric_columns": ["baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"],
+          "absolute_tolerance": 1e-8,
+          "relative_tolerance": 1e-6
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/normalized_counts.tsv",
+          "expected": "expected/072-rnaseq-deseq2/normalized_counts.tsv",
+          "key_columns": ["gene_id"],
+          "numeric_columns": ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
+          "absolute_tolerance": 1e-8,
+          "relative_tolerance": 1e-6
+        },
+        {
+          "type": "exact",
+          "path": "results/contrast_summary.tsv",
+          "expected": "expected/072-rnaseq-deseq2/contrast_summary.tsv"
+        },
+        {
+          "type": "tsv_numeric",
+          "path": "results/sample_qc.tsv",
+          "expected": "expected/072-rnaseq-deseq2/sample_qc.tsv",
+          "key_columns": ["sample_id"],
+          "exact_columns": ["raw_library_size", "detected_genes"],
+          "numeric_columns": ["PC1", "PC2"],
+          "absolute_tolerance": 1e-8,
+          "relative_tolerance": 1e-6
+        }
+      ]
+    }
+  ]
+}

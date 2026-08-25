@@ -25,6 +25,7 @@ REVIEW_CLASSES = {"golden", "domain", "external", "visual", "recipe"}
 REVIEW_STATUSES = {"automated", "approved", "pending"}
 RELEASABLE_STATUSES = {"automated", "approved"}
 RELEASED_DECISIONS = {"integrated", "recipe", "retained"}
+GENERIC_AUTHOR_MARKERS = {"biohub contributors", "contributors", "anonymous"}
 
 
 def options() -> argparse.Namespace:
@@ -55,6 +56,64 @@ def package_version(root: Path) -> str:
     return match.group(1)
 
 
+def valid_orcid(value: str) -> bool:
+    identifier = value.removeprefix("https://orcid.org/").replace("-", "")
+    if not re.fullmatch(r"\d{15}[\dX]", identifier):
+        return False
+    total = 0
+    for character in identifier[:15]:
+        total = (total + int(character)) * 2
+    result = (12 - total % 11) % 11
+    expected = "X" if result == 10 else str(result)
+    return identifier[-1] == expected
+
+
+def validate_citation_metadata(
+    citation: str,
+    release: bool,
+    changelog_state: str,
+) -> None:
+    lowered = citation.lower()
+    for marker in GENERIC_AUTHOR_MARKERS:
+        if re.search(
+            rf"^\s*-?\s*name:\s*[\"']?{re.escape(marker)}[\"']?\s*$",
+            lowered,
+            re.MULTILINE,
+        ):
+            raise ValueError("CITATION.cff uses a generic author")
+    if not re.search(r"^\s+-?\s*family-names:\s*\S+", citation, re.MULTILINE):
+        raise ValueError("CITATION.cff needs structured family-names")
+    if not re.search(r"^\s+-?\s*given-names:\s*\S+", citation, re.MULTILINE):
+        raise ValueError("CITATION.cff needs structured given-names")
+    if not re.search(r"^\s+affiliation:\s*\S+", citation, re.MULTILINE):
+        raise ValueError("CITATION.cff needs author affiliation")
+    if not re.search(r"^abstract:\s*(?:>|\S)", citation, re.MULTILINE):
+        raise ValueError("CITATION.cff abstract missing")
+    if not re.search(r"^keywords:\s*$", citation, re.MULTILINE):
+        raise ValueError("CITATION.cff keywords missing")
+
+    orcids = re.findall(r"https://orcid\.org/(\d{4}-\d{4}-\d{4}-[\dX]{4})", citation)
+    if not orcids:
+        raise ValueError("CITATION.cff needs an ORCID URL")
+    for identifier in orcids:
+        if not valid_orcid(identifier):
+            raise ValueError(f"CITATION.cff has invalid ORCID checksum: {identifier}")
+
+    released = re.search(
+        r"^date-released:\s*[\"']?(\d{4}-\d{2}-\d{2})[\"']?\s*$",
+        citation,
+        re.MULTILINE,
+    )
+    if changelog_state == "Unreleased" and released:
+        raise ValueError("CITATION.cff date-released must be absent while CHANGELOG is Unreleased")
+    if release:
+        if not released:
+            raise ValueError("formal release requires CITATION.cff date-released")
+        validate_date(released.group(1), "CITATION.cff date-released")
+        if released.group(1) != changelog_state:
+            raise ValueError("CITATION.cff date-released differs from CHANGELOG release date")
+
+
 def validate_versions(root: Path, release: bool, tag: str | None) -> str:
     version = package_version(root)
     if release and not tag:
@@ -70,8 +129,12 @@ def validate_versions(root: Path, release: bool, tag: str | None) -> str:
     heading = re.search(rf"^## {re.escape(version)} - (.+)$", changelog, flags=re.MULTILINE)
     if not heading:
         raise ValueError("CHANGELOG release heading missing")
-    if release and heading.group(1).strip() == "Unreleased":
+    changelog_state = heading.group(1).strip()
+    if release and changelog_state == "Unreleased":
         raise ValueError("CHANGELOG still marks release as Unreleased")
+    if changelog_state != "Unreleased":
+        validate_date(changelog_state, "CHANGELOG release heading")
+    validate_citation_metadata(citation, release, changelog_state)
     if tag and tag != f"v{version}":
         raise ValueError(f"tag {tag} differs from package version v{version}")
     return version

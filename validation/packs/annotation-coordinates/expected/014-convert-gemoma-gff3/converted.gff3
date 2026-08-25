@@ -1,0 +1,10 @@
+chr1	GeMoMa	gene	1	100	.	+	.	ID=PlantsCHR1gene00001;Name=Plant00001
+chr1	GeMoMa	mRNA	1	100	.	+	.	ID=PlantsCHR1gene00001.1;Parent=PlantsCHR1gene00001;Name=Plant00001.1
+chr1	GeMoMa	exon	1	30	.	+	0	ID=PlantsCHR1gene00001.1.exon1;Parent=PlantsCHR1gene00001.1
+chr1	GeMoMa	CDS	1	30	.	+	0	ID=cds.PlantsCHR1gene00001.1;Parent=PlantsCHR1gene00001.1
+chr1	GeMoMa	exon	51	90	.	+	2	ID=PlantsCHR1gene00001.1.exon2;Parent=PlantsCHR1gene00001.1
+chr1	GeMoMa	CDS	51	90	.	+	2	ID=cds.PlantsCHR1gene00001.1;Parent=PlantsCHR1gene00001.1
+scaf-2	GeMoMa	gene	5	60	.	-	.	ID=PlantsSCAF-2gene00002;Name=Plant00002
+scaf-2	GeMoMa	mRNA	5	60	.	-	.	ID=PlantsSCAF-2gene00002.1;Parent=PlantsSCAF-2gene00002;Name=Plant00002.1
+scaf-2	GeMoMa	exon	20	60	.	-	1	ID=PlantsSCAF-2gene00002.1.exon1;Parent=PlantsSCAF-2gene00002.1
+scaf-2	GeMoMa	CDS	20	60	.	-	1	ID=cds.PlantsSCAF-2gene00002.1;Parent=PlantsSCAF-2gene00002.1

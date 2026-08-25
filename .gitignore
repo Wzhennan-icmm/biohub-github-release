@@ -1,9 +1,11 @@
 /target/
 biohub-rs/target/
 .venv-ci/
+.venv-cff/
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 .DS_Store
 audit/private-script-inventory.*
+validation/evidence/

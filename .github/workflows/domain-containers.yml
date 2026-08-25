@@ -18,11 +18,6 @@ on:
         required: true
         default: dev
         type: string
-      publish:
-        description: Push images to GHCR
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -50,10 +45,12 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: Select image tag
         shell: bash
+        env:
+          RAW_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          raw_tag="${{ inputs.image_tag }}"
+          raw_tag="${RAW_IMAGE_TAG}"
           image_tag="${raw_tag#v}"
-          test -n "$image_tag"
+          [[ "${image_tag}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
           echo "BIOHUB_IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
       - name: Build
         run: >-
@@ -94,6 +91,31 @@ jobs:
           docker run --rm -v "$PWD:/repo:ro" --entrypoint python "$image" \
             /repo/tools/snakemake_smoke.py --root /repo --snakemake snakemake \
             --biohub biohub --execute-safe "${recipe_args[@]}"
+      - name: Build public domain-review evidence
+        if: matrix.environment == 'comparative' || matrix.environment == 'omics'
+        shell: bash
+        run: |
+          mkdir -p validation-evidence
+          chmod 0777 validation-evidence
+          if [[ "${{ matrix.environment }}" == "comparative" ]]; then
+            pack=orthology-codon
+          else
+            pack=statistics
+          fi
+          image="ghcr.io/wzhennan-icmm/biohub-${{ matrix.environment }}:${BIOHUB_IMAGE_TAG}"
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo build \
+            --pack "$pack" --output /evidence \
+            --biohub /usr/local/bin/biohub --snakemake /opt/conda/bin/snakemake
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence:ro" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo verify \
+            --pack "$pack" --output /evidence
       - if: inputs.publish
         uses: docker/login-action@v3
         with:
@@ -116,4 +138,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: biohub-${{ matrix.environment }}-${{ env.BIOHUB_IMAGE_TAG }}-metadata
-          path: domain-metadata/
+          path: |
+            domain-metadata/
+            validation-evidence/

@@ -1,0 +1,7 @@
+ctgP	test	gene	10	20	.	+	.	ID=primary_plus
+ctgM	test	gene	10	20	.	+	.	ID=primary_minus
+ctgS	test	gene	10	20	.	+	.	ID=split_primary
+ctgS	test	gene	120	150	.	+	.	ID=split_plus
+ctgS	test	gene	320	340	.	+	.	ID=split_minus
+ctgO	test	gene	90	120	.	+	.	ID=out_of_range
+ctgU	test	gene	1	2	.	+	.	ID=unmapped

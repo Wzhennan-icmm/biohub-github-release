@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "pack_id": "orthology-codon",
+  "title": "Reciprocal orthology sets and protein-guided codon alignment",
+  "inventory_ids": ["030", "033", "034", "043"],
+  "fixture_license": "CC0-1.0 synthetic fixture",
+  "dependencies": ["mafft", "pal2nal.pl"],
+  "acceptance": [
+    "Reciprocal orthology member sets and sample IDs match reviewed references exactly.",
+    "Codon-position and fourfold-degenerate outputs match reviewed references exactly.",
+    "Every PAL2NAL sequence length is divisible by three, translates to its source protein, and has no unexpected internal stop.",
+    "Every recipe orthogroup reports completed with expected protein/CDS taxon counts."
+  ],
+  "manual_checks": [
+    "Confirm num-species=3 means two reciprocal targets per query and duplicated hits are excluded.",
+    "Confirm variable fourfold codons are retained by ID 033 but only invariant codons by ID 034.",
+    "Inspect MAFFT/PAL2NAL alignment and confirm protein/CDS identifiers represent same taxa."
+  ],
+  "reference_commands": [
+    "mafft --maxiterate 1000 --localpair source/fixtures/protein-groups/OG0001.fa > protein.aln",
+    "pal2nal.pl protein.aln source/fixtures/cds.fasta -output paml -nogap > codon.paml",
+    "python3 tools/validation_review.py verify --pack orthology-codon"
+  ],
+  "steps": [
+    {
+      "id": "030-best-hit-from-blast",
+      "runner": "biohub",
+      "args": [
+        "run", "get-best-hit-from-blast",
+        "-i", "{fixtures}/reciprocal-hits",
+        "-n", "3",
+        "-o", "{output}/orthogroups.tsv"
+      ],
+      "outputs": ["orthogroups.tsv"],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "orthogroups.tsv",
+          "expected": "expected/030-best-hit-from-blast/orthogroups.tsv"
+        }
+      ]
+    },
+    {
+      "id": "033-diff-sites",
+      "runner": "biohub",
+      "args": [
+        "run", "get-diff-sites-from-orthology",
+        "-i", "{fixtures}/codon-alignments",
+        "-o", "{output}/sites"
+      ],
+      "outputs": [
+        "sites/allSingleCopyGeneSeq.fasta",
+        "sites/TheFirstSite.fasta",
+        "sites/TheSecondSite.fasta",
+        "sites/TheThirdSite.fasta",
+        "sites/fourDegenerateSite.fasta",
+        "sites/fourDegenerateCodenFile.fasta",
+        "sites/filesImportScripts.txt"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "sites/TheFirstSite.fasta",
+          "expected": "expected/033-diff-sites/TheFirstSite.fasta"
+        },
+        {
+          "type": "exact",
+          "path": "sites/TheSecondSite.fasta",
+          "expected": "expected/033-diff-sites/TheSecondSite.fasta"
+        },
+        {
+          "type": "exact",
+          "path": "sites/TheThirdSite.fasta",
+          "expected": "expected/033-diff-sites/TheThirdSite.fasta"
+        },
+        {
+          "type": "exact",
+          "path": "sites/fourDegenerateSite.fasta",
+          "expected": "expected/033-diff-sites/fourDegenerateSite.fasta"
+        },
+        {
+          "type": "exact",
+          "path": "sites/fourDegenerateCodenFile.fasta",
+          "expected": "expected/033-diff-sites/fourDegenerateCodenFile.fasta"
+        }
+      ]
+    },
+    {
+      "id": "034-four-degenerate",
+      "runner": "biohub",
+      "args": [
+        "run", "get-four-degenerate-sites",
+        "-i", "{fixtures}/codon-alignments",
+        "-o", "{output}/sites"
+      ],
+      "outputs": [
+        "sites/fourDegenerateSite.fasta",
+        "sites/fourDegenerateSite.stat"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "sites/fourDegenerateSite.fasta",
+          "expected": "expected/034-four-degenerate/fourDegenerateSite.fasta"
+        },
+        {
+          "type": "exact",
+          "path": "sites/fourDegenerateSite.stat",
+          "expected": "expected/034-four-degenerate/fourDegenerateSite.stat"
+        }
+      ]
+    },
+    {
+      "id": "043-comparative-orthology-codon",
+      "runner": "recipe",
+      "recipe": "comparative-orthology-codon",
+      "config": "configs/comparative-orthology-codon.json",
+      "outputs": [
+        "results/summary.tsv",
+        "results/codon_alignments/validation_summary.tsv",
+        "results/codon_alignments/OG0001.fa.codon.paml",
+        "logs/validation.log"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "results/summary.tsv",
+          "expected": "expected/043-comparative-orthology-codon/summary.tsv"
+        },
+        {
+          "type": "exact",
+          "path": "results/codon_alignments/validation_summary.tsv",
+          "expected": "expected/043-comparative-orthology-codon/validation_summary.tsv"
+        },
+        {
+          "type": "codon_translation",
+          "path": "results/codon_alignments/OG0001.fa.codon.paml",
+          "protein_fasta": "fixtures/protein-groups/OG0001.fa"
+        }
+      ]
+    }
+  ]
+}

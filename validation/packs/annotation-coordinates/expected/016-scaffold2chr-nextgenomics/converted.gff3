@@ -1,0 +1,5 @@
+chr1	test	gene	109	119	.	+	.	ID=primary_plus
+chr2	test	gene	580	590	.	-	.	ID=primary_minus
+chr3	test	gene	1009	1019	.	+	.	ID=split_primary
+chr3	test	gene	2019	2049	.	+	.	ID=split_plus
+chr4	test	gene	560	580	.	-	.	ID=split_minus

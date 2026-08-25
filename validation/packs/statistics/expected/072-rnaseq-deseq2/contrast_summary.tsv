@@ -1,0 +1,2 @@
+contrast_id	factor	numerator	denominator	tested_genes	adjusted_genes	significant_genes	up_genes	down_genes
+treated_vs_control	condition	treated	control	60	60	14	9	5

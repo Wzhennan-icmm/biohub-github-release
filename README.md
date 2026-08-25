@@ -20,7 +20,8 @@ cargo build --release --locked
 ```
 
 Release archives provide Linux/macOS binaries plus R backends, recipes,
-compatibility wrappers, licenses, and metadata. Verify release SHA256 files before use.
+compatibility wrappers, public validation packs, licenses, and metadata. Verify
+release SHA256 files before use.
 
 ### Core container
 
@@ -31,7 +32,7 @@ docker run --rm -v "$PWD:/work" -w /work biohub:local doctor
 ```
 
 Core container includes `Rscript`, `samtools`, `mafft`, `pal2nal.pl`, recipes, and
-fixtures. Domain recipes need dependencies listed by `biohub doctor --recipe ID`.
+example fixtures. Domain recipes need dependencies listed by `biohub doctor --recipe ID`.
 Local builds use mutable upstream package repositories and are not bitwise locked;
 for publication, retain released image digest plus exact environment export.
 

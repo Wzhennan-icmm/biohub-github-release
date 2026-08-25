@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "pack_id": "visualization",
+  "title": "Pandepth and mosdepth publication graphics",
+  "inventory_ids": ["045", "046", "047"],
+  "fixture_license": "CC0-1.0 synthetic fixture",
+  "acceptance": [
+    "Source rows and derived chromosome statistics match reviewed references exactly.",
+    "SVG title, point count, finite coordinates, and whole-file FNV-1a fingerprint match.",
+    "Human reviewer accepts title, axes, ranges, colors, overplotting, and publication-size readability."
+  ],
+  "manual_checks": [
+    "Open all three SVG files at 100% and publication-column width.",
+    "Confirm titles, axis labels, coordinate ranges, colors, and legend semantics.",
+    "Confirm no point is clipped, hidden by overplotting, or visually misleading."
+  ],
+  "reference_commands": [
+    "python3 tools/validation_review.py verify --pack visualization",
+    "open validation/evidence/visualization/gallery.html"
+  ],
+  "gallery": [
+    {"step": "045-plot-depth-pandepth", "path": "plot/depth_gc_scatter.svg", "caption": "Basic pandepth depth versus GC"},
+    {"step": "046-plot-depth-pandepth2", "path": "plot/depth_gc_styled.svg", "caption": "Styled pandepth depth versus GC"},
+    {"step": "047-plot-mosdepth-point", "path": "plot/mosdepth_scatter.svg", "caption": "Mosdepth point coverage"}
+  ],
+  "steps": [
+    {
+      "id": "045-plot-depth-pandepth",
+      "runner": "biohub",
+      "args": [
+        "run", "plot-depth-pandepth",
+        "-i", "{fixtures}/pandepth.tsv",
+        "-o", "{output}/plot",
+        "-l", "0"
+      ],
+      "outputs": [
+        "plot/chromosome_stats.tsv",
+        "plot/filtered_depth.tsv",
+        "plot/depth_gc_scatter.svg"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "plot/chromosome_stats.tsv",
+          "expected": "expected/045-plot-depth-pandepth/chromosome_stats.tsv"
+        },
+        {
+          "type": "exact",
+          "path": "plot/filtered_depth.tsv",
+          "expected": "expected/045-plot-depth-pandepth/filtered_depth.tsv"
+        },
+        {
+          "type": "svg",
+          "path": "plot/depth_gc_scatter.svg",
+          "contains": ["Pandepth depth vs GC"],
+          "circle_count": 5,
+          "fnv1a64": 11779402563777481233
+        }
+      ]
+    },
+    {
+      "id": "046-plot-depth-pandepth2",
+      "runner": "biohub",
+      "args": [
+        "run", "plot-depth-pandepth2",
+        "-i", "{fixtures}/pandepth.tsv",
+        "-o", "{output}/plot",
+        "-l", "0"
+      ],
+      "outputs": ["plot/depth_gc_styled.svg"],
+      "checks": [
+        {
+          "type": "svg",
+          "path": "plot/depth_gc_styled.svg",
+          "contains": ["Pandepth depth vs GC (styled)"],
+          "circle_count": 5,
+          "fnv1a64": 17556672687734655657
+        }
+      ]
+    },
+    {
+      "id": "047-plot-mosdepth-point",
+      "runner": "biohub",
+      "args": [
+        "run", "plot-mosdepth-point",
+        "-i", "{fixtures}/mosdepth.tsv",
+        "-o", "{output}/plot",
+        "-l", "0"
+      ],
+      "outputs": [
+        "plot/mosdepth_points.tsv",
+        "plot/mosdepth_scatter.svg"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "plot/mosdepth_points.tsv",
+          "expected": "expected/047-plot-mosdepth-point/mosdepth_points.tsv"
+        },
+        {
+          "type": "svg",
+          "path": "plot/mosdepth_scatter.svg",
+          "contains": ["Mosdepth point coverage"],
+          "circle_count": 5,
+          "fnv1a64": 17764904749355255246
+        }
+      ]
+    }
+  ]
+}

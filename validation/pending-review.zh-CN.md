@@ -3,6 +3,16 @@
 自动验证不能代替科研领域判断。正式 `v0.4.0` 发布前，以下14项必须由具名审核人
 使用去标识化代表数据复核，并按 `review-template.md` 保存记录。
 
+公开 CC0-1.0 合成数据、参数、参考基线和验收容差已分为四个验证包：
+
+```bash
+python3 tools/validation_review.py build --pack all
+python3 tools/validation_review.py verify --pack all
+```
+
+每个包生成 `validation/evidence/<pack>/review.md`、输入/输出 SHA256、软件
+版本、完整命令和自动差异。脚本不提供自动批准入口。
+
 ## GFF 与坐标转换
 
 - `014 convert-gemoma-gff3`：用 GFF3 validator 检查 ID/Parent、feature 类型、phase 和层级。
@@ -39,3 +49,7 @@
 4. 将记录加入 `validation/`；把 `reviews.tsv` 状态改为 `approved`。
 5. 同一提交移除迁移矩阵对应 `pending` 标记。
 6. 运行 `python3 tools/validate_release.py --release --tag v0.4.0`；必须通过。
+
+建议逐包批准口令：`批准 annotation-coordinates`、`批准 orthology-codon`、
+`批准 visualization`、`批准 statistics`。每个口令只覆盖对应 inventory IDs；
+未明确批准的包继续保持 `pending`。

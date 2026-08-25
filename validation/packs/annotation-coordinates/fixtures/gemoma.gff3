@@ -1,0 +1,8 @@
+##gff-version 3
+chr1	GeMoMa	gene	1	100	.	+	.	ID=old_gene1
+chr1	GeMoMa	mRNA	1	100	.	+	.	ID=old_tx1;Parent=old_gene1
+chr1	GeMoMa	CDS	1	30	.	+	0	Parent=old_tx1
+chr1	GeMoMa	CDS	51	90	.	+	2	Parent=old_tx1
+scaf-2	GeMoMa	gene	5	60	.	-	.	ID=old_gene2
+scaf-2	GeMoMa	mRNA	5	60	.	-	.	ID=old_tx2;Parent=old_gene2
+scaf-2	GeMoMa	CDS	20	60	.	-	1	Parent=old_tx2

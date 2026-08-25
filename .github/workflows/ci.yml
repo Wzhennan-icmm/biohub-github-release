@@ -18,6 +18,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+      - name: Validate Citation File Format in isolated environment
+        run: |
+          python -m venv .venv-cff
+          .venv-cff/bin/python -m pip install --disable-pip-version-check -r requirements-cff.txt
+          .venv-cff/bin/cffconvert --validate
       - run: python tools/validate_recipes.py
       - run: python tools/validate_release.py
       - run: python -m unittest discover -s tools/tests -v
@@ -43,6 +48,13 @@ jobs:
         working-directory: biohub-rs
       - run: cargo test --locked
         working-directory: biohub-rs
+      - name: Build command/visual review evidence
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python3 tools/validation_review.py build --pack annotation-coordinates --biohub biohub-rs/target/debug/biohub
+          python3 tools/validation_review.py verify --pack annotation-coordinates
+          python3 tools/validation_review.py build --pack visualization --biohub biohub-rs/target/debug/biohub
+          python3 tools/validation_review.py verify --pack visualization
       - run: cargo run --locked -- catalog --format json > /tmp/catalog.json
         working-directory: biohub-rs
 

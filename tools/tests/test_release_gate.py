@@ -46,6 +46,18 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("differs from package version", result.stderr)
 
+    def test_publication_orcid_checksum_is_valid(self) -> None:
+        self.assertTrue(validate_release.valid_orcid("0000-0003-4883-2538"))
+        self.assertTrue(
+            validate_release.valid_orcid("https://orcid.org/0000-0003-4883-2538")
+        )
+        self.assertFalse(validate_release.valid_orcid("0000-0003-4883-2539"))
+
+    def test_formal_citation_requires_release_date(self) -> None:
+        citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "date-released"):
+            validate_release.validate_citation_metadata(citation, True, "2026-08-25")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,25 @@ commit.
 Current human-review work is listed in
 [`pending-review.zh-CN.md`](pending-review.zh-CN.md).
 
+Four public CC0-1.0 representative packs live under `validation/packs/`:
+
+- `annotation-coordinates`: inventory IDs 014, 015, 016
+- `orthology-codon`: inventory IDs 030, 033, 034, 043
+- `visualization`: inventory IDs 045, 046, 047
+- `statistics`: inventory IDs 049, 050, 053, 072
+
+Build self-contained evidence under ignored `validation/evidence/`:
+
+```bash
+python3 tools/validation_review.py build --pack all
+python3 tools/validation_review.py verify --pack all
+python3 tools/validation_review.py summary
+```
+
+`validation_review.py` has no approval operation. Generated `review.md` always
+uses `human_status=pending`. Only explicit named human approval may change
+`reviews.tsv` and `docs/SCRIPT_MIGRATION_MATRIX.tsv`.
+
 Run normal consistency validation:
 
 ```bash

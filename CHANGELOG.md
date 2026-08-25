@@ -35,6 +35,12 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
 - Make map-backed outputs deterministic and reject stale local launcher binaries.
 - Gate GitHub Release on validation readiness, three native archives, and five
   tested immutable domain containers.
+- Add four public CC0 validation packs with explicit numeric, codon, coordinate,
+  and visual acceptance contracts; evidence generation cannot self-approve.
+- Add structured CFF author/affiliation/ORCID metadata and isolated schema
+  validation without downgrading Snakemake's JSON Schema runtime.
+- Split release automation into non-publishing manual preflight and annotated-tag
+  publication paths; enforce tag target equals current `main`.
 
 ## 0.3.0 - Development snapshot
 
