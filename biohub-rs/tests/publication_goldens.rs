@@ -980,6 +980,10 @@ fn coordinate_conversion_and_visual_outputs_match_goldens() {
     let mosdepth_svg =
         fs::read_to_string(mosdepth_dir.join("mosdepth_scatter.svg")).expect("mosdepth SVG");
     assert!(mosdepth_svg.contains("Mosdepth point coverage"));
+    assert!(mosdepth_svg.contains("Cumulative coordinate (bp)"));
+    assert!(mosdepth_svg.contains(">1.000e6</text>"));
+    assert!(!mosdepth_svg.contains("1000250.000"));
+    assert!(mosdepth_svg.contains("width=\"1456\" height=\"752\""));
     assert_eq!(mosdepth_svg.matches("<circle ").count(), 5);
     assert!(!mosdepth_svg.contains("NaN"));
     assert_eq!(
@@ -989,9 +993,9 @@ fn coordinate_conversion_and_visual_outputs_match_goldens() {
             fnv1a64(mosdepth_svg.as_bytes()),
         ),
         (
-            11_779_402_563_777_481_233,
-            17_556_672_687_734_655_657,
-            17_764_904_749_355_255_246,
+            16_003_651_542_915_846_961,
+            9_735_390_511_139_191_809,
+            4_668_410_909_478_566_491,
         ),
         "visual golden fingerprints changed"
     );

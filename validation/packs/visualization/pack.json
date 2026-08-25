@@ -54,7 +54,7 @@
           "path": "plot/depth_gc_scatter.svg",
           "contains": ["Pandepth depth vs GC"],
           "circle_count": 5,
-          "fnv1a64": 11779402563777481233
+          "fnv1a64": 16003651542915846961
         }
       ]
     },
@@ -74,7 +74,7 @@
           "path": "plot/depth_gc_styled.svg",
           "contains": ["Pandepth depth vs GC (styled)"],
           "circle_count": 5,
-          "fnv1a64": 17556672687734655657
+          "fnv1a64": 9735390511139191809
         }
       ]
     },
@@ -100,9 +100,14 @@
         {
           "type": "svg",
           "path": "plot/mosdepth_scatter.svg",
-          "contains": ["Mosdepth point coverage"],
+          "contains": [
+            "Mosdepth point coverage",
+            "Cumulative coordinate (bp)",
+            ">1.000e6</text>",
+            "width=\"1456\" height=\"752\""
+          ],
           "circle_count": 5,
-          "fnv1a64": 17764904749355255246
+          "fnv1a64": 4668410909478566491
         }
       ]
     }

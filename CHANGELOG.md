@@ -37,6 +37,8 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
   tested immutable domain containers.
 - Add four public CC0 validation packs with explicit numeric, codon, coordinate,
   and visual acceptance contracts; evidence generation cannot self-approve.
+- Prevent SVG scatter tick and chromosome-label clipping with adaptive numeric
+  formatting and dedicated custom-axis margins.
 - Add structured CFF author/affiliation/ORCID metadata and isolated schema
   validation without downgrading Snakemake's JSON Schema runtime.
 - Split release automation into non-publishing manual preflight and annotated-tag

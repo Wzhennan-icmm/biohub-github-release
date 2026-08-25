@@ -181,6 +181,17 @@ fn svg_color(idx: usize) -> &'static str {
     SVGPLOT_COLORS[idx % SVGPLOT_COLORS.len()]
 }
 
+fn format_svg_tick(value: f64) -> String {
+    let magnitude = value.abs();
+    if magnitude >= 1_000_000.0 || (magnitude > 0.0 && magnitude < 0.001) {
+        format!("{value:.3e}")
+    } else if magnitude >= 1_000.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.3}")
+    }
+}
+
 fn downsample<T: Clone>(data: &[T], max_points: usize) -> Vec<T> {
     if data.len() <= max_points {
         return data.to_vec();
@@ -227,10 +238,11 @@ fn write_scatter_svg(
         y_max += 1.0;
     }
 
+    let has_custom_x_ticks = options.custom_x_ticks.is_some();
     let margin_left = 80.0;
-    let margin_right = 24.0;
+    let margin_right = if has_custom_x_ticks { 64.0 } else { 32.0 };
     let margin_top = 52.0;
-    let margin_bottom = 64.0;
+    let margin_bottom = if has_custom_x_ticks { 96.0 } else { 64.0 };
 
     let w = options.width as f64;
     let h = options.height as f64;
@@ -273,6 +285,7 @@ fn write_scatter_svg(
         let ratio = i as f64 / x_ticks as f64;
         let x = margin_left + ratio * plot_w;
         let value = x_min + ratio * (x_max - x_min);
+        let label = format_svg_tick(value);
         writeln!(
             out,
             "<line x1=\"{x}\" y1=\"{t}\" x2=\"{x}\" y2=\"{y2}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
@@ -281,10 +294,10 @@ fn write_scatter_svg(
         )?;
         writeln!(
             out,
-            "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"middle\" fill=\"#333\">{value:.3}</text>",
+            "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"middle\" fill=\"#333\">{label}</text>",
             x = x,
             yt = margin_top + plot_h + 22.0,
-            value = value
+            label = label
         )?;
     }
 
@@ -315,6 +328,7 @@ fn write_scatter_svg(
         let ratio = i as f64 / y_ticks as f64;
         let y = margin_top + plot_h - ratio * plot_h;
         let value = y_min + ratio * (y_max - y_min);
+        let label = format_svg_tick(value);
         writeln!(
             out,
             "<line x1=\"{l}\" y1=\"{y}\" x2=\"{r}\" y2=\"{y}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
@@ -323,10 +337,10 @@ fn write_scatter_svg(
         )?;
         writeln!(
             out,
-            "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"end\" dy=\"4\" fill=\"#333\">{value:.3}</text>",
+            "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"end\" dy=\"4\" fill=\"#333\">{label}</text>",
             x = margin_left - 8.0,
             y = y,
-            value = value
+            label = label
         )?;
     }
 
@@ -7209,6 +7223,14 @@ mod tests {
     #[test]
     fn test_json_escape_handles_control_characters() {
         assert_eq!(json_escape("a\"b\\c\n"), "a\\\"b\\\\c\\n");
+    }
+
+    #[test]
+    fn test_svg_tick_formatting_limits_label_width() {
+        assert_eq!(format_svg_tick(40.0), "40.000");
+        assert_eq!(format_svg_tick(125_075.0), "125075");
+        assert_eq!(format_svg_tick(1_000_250.0), "1.000e6");
+        assert_eq!(format_svg_tick(0.000_25), "2.500e-4");
     }
 
     #[test]
