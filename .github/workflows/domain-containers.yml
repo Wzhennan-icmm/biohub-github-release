@@ -142,3 +142,4 @@ jobs:
           path: |
             domain-metadata/
             validation-evidence/
+          include-hidden-files: true

@@ -39,6 +39,8 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
   and visual acceptance contracts; evidence generation cannot self-approve.
 - Prevent SVG scatter tick and chromosome-label clipping with adaptive numeric
   formatting and dedicated custom-axis margins.
+- Preserve hidden Snakemake logs in downloadable review artifacts and verify the
+  uploaded archives before accepting CI domain-review jobs.
 - Add structured CFF author/affiliation/ORCID metadata and isolated schema
   validation without downgrading Snakemake's JSON Schema runtime.
 - Split release automation into non-publishing manual preflight and annotated-tag

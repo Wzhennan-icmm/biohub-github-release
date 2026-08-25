@@ -71,6 +71,7 @@ jobs:
           name: domain-review-annotation-coordinates
           path: ${{ runner.temp }}/domain-review-annotation-coordinates/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
       - name: Upload visualization review evidence
         if: matrix.os == 'ubuntu-latest'
@@ -79,7 +80,27 @@ jobs:
           name: domain-review-visualization
           path: ${{ runner.temp }}/domain-review-visualization/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
+      - name: Download annotation-coordinates review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: domain-review-annotation-coordinates
+          path: ${{ runner.temp }}/downloaded-domain-reviews
+      - name: Download visualization review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: domain-review-visualization
+          path: ${{ runner.temp }}/downloaded-domain-reviews
+      - name: Verify downloaded core review evidence
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python3 tools/validation_review.py verify --pack annotation-coordinates \
+            --output "${RUNNER_TEMP}/downloaded-domain-reviews"
+          python3 tools/validation_review.py verify --pack visualization \
+            --output "${RUNNER_TEMP}/downloaded-domain-reviews"
       - run: cargo run --locked -- catalog --format json > /tmp/catalog.json
         working-directory: biohub-rs
 
@@ -141,7 +162,25 @@ jobs:
           name: domain-review-${{ matrix.pack }}
           path: validation-evidence/
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 30
+      - uses: actions/download-artifact@v4
+        if: success()
+        with:
+          name: domain-review-${{ matrix.pack }}
+          path: downloaded-validation-evidence
+      - name: Verify downloaded public review pack
+        if: success()
+        shell: bash
+        run: |
+          pack="${{ matrix.pack }}"
+          image="biohub-domain-review:${{ matrix.environment }}"
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/downloaded-validation-evidence:/evidence:ro" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo verify \
+            --pack "$pack" --output /evidence
 
   security:
     runs-on: ubuntu-latest
