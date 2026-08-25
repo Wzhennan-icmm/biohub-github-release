@@ -55,6 +55,31 @@ jobs:
           python3 tools/validation_review.py verify --pack annotation-coordinates
           python3 tools/validation_review.py build --pack visualization --biohub biohub-rs/target/debug/biohub
           python3 tools/validation_review.py verify --pack visualization
+      - name: Stage core review artifacts with pack directories
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p "${RUNNER_TEMP}/domain-review-annotation-coordinates"
+          mkdir -p "${RUNNER_TEMP}/domain-review-visualization"
+          cp -R validation/evidence/annotation-coordinates \
+            "${RUNNER_TEMP}/domain-review-annotation-coordinates/"
+          cp -R validation/evidence/visualization \
+            "${RUNNER_TEMP}/domain-review-visualization/"
+      - name: Upload annotation-coordinates review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-review-annotation-coordinates
+          path: ${{ runner.temp }}/domain-review-annotation-coordinates/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload visualization review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-review-visualization
+          path: ${{ runner.temp }}/domain-review-visualization/
+          if-no-files-found: error
+          retention-days: 30
       - run: cargo run --locked -- catalog --format json > /tmp/catalog.json
         working-directory: biohub-rs
 
@@ -75,7 +100,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [comparative, omics]
+        include:
+          - environment: comparative
+            pack: orthology-codon
+          - environment: omics
+            pack: statistics
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,11 +119,7 @@ jobs:
         run: |
           mkdir -p validation-evidence
           chmod 0777 validation-evidence
-          if [[ "${{ matrix.environment }}" == "comparative" ]]; then
-            pack=orthology-codon
-          else
-            pack=statistics
-          fi
+          pack="${{ matrix.pack }}"
           image="biohub-domain-review:${{ matrix.environment }}"
           docker run --rm \
             -v "$PWD:/repo:ro" \
@@ -113,9 +138,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: domain-review-${{ matrix.environment }}
+          name: domain-review-${{ matrix.pack }}
           path: validation-evidence/
           if-no-files-found: warn
+          retention-days: 30
 
   security:
     runs-on: ubuntu-latest

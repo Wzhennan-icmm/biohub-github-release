@@ -13,6 +13,13 @@ python3 tools/validation_review.py verify --pack all
 每个包生成 `validation/evidence/<pack>/review.md`、输入/输出 SHA256、软件
 版本、完整命令和自动差异。脚本不提供自动批准入口。
 
+PR CI 同时保留 30 天的四个独立 artifact：
+`domain-review-annotation-coordinates`、`domain-review-orthology-codon`、
+`domain-review-visualization`、`domain-review-statistics`。从 Actions run 下载后，
+先运行 `python3 tools/validation_review.py verify --pack <pack> --output <解压目录>`，
+再查看 `review.md`、`comparisons.tsv`、`versions.tsv`；可视化包另看
+`gallery.html`。
+
 ## GFF 与坐标转换
 
 - `014 convert-gemoma-gff3`：用 GFF3 validator 检查 ID/Parent、feature 类型、phase 和层级。

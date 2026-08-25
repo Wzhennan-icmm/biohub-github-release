@@ -32,6 +32,12 @@ python3 tools/validation_review.py summary
 uses `human_status=pending`. Only explicit named human approval may change
 `reviews.tsv` and `docs/SCRIPT_MIGRATION_MATRIX.tsv`.
 
+Pull-request CI uploads one 30-day artifact per pack:
+`domain-review-annotation-coordinates`, `domain-review-orthology-codon`,
+`domain-review-visualization`, and `domain-review-statistics`. Each artifact is
+self-contained and includes copied fixtures, commands, versions, comparisons,
+SHA256 manifests, and a pending human-review form.
+
 Run normal consistency validation:
 
 ```bash
