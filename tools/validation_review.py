@@ -69,6 +69,11 @@ def options() -> argparse.Namespace:
         action="store_true",
         help="replace only selected existing evidence directories",
     )
+    build.add_argument(
+        "--keep-failed",
+        action="store_true",
+        help="retain selected failed pack output for diagnosis; status remains failed",
+    )
 
     verify = subparsers.add_parser("verify", help="verify hashes and comparisons")
     verify.add_argument("--pack", choices=(*PACK_IDS, "all"), default="all")
@@ -643,6 +648,7 @@ def build_pack(
     biohub: Path,
     snakemake: Path | None,
     force: bool,
+    keep_failed: bool,
 ) -> Path:
     source_pack = root / "validation/packs" / pack_id
     load_pack(source_pack)
@@ -764,7 +770,13 @@ def build_pack(
             shutil.rmtree(final)
         temporary.rename(final)
         return final
-    except Exception:
+    except Exception as error:
+        if keep_failed:
+            failed = output_root / f"{pack_id}.failed"
+            if failed.exists():
+                shutil.rmtree(failed)
+            temporary.rename(failed)
+            raise ValidationError(f"{error}; failed output retained at {failed}") from error
         shutil.rmtree(temporary, ignore_errors=True)
         raise
 
@@ -830,7 +842,15 @@ def main() -> int:
         biohub = resolve_executable(root, args.biohub)
         snakemake = resolve_snakemake(root, args.snakemake)
         for pack_id in pack_ids:
-            built = build_pack(root, pack_id, output_root, biohub, snakemake, args.force)
+            built = build_pack(
+                root,
+                pack_id,
+                output_root,
+                biohub,
+                snakemake,
+                args.force,
+                args.keep_failed,
+            )
             print(f"built\t{pack_id}\t{built}\thuman_status=pending")
         return 0
     for pack_id in pack_ids:

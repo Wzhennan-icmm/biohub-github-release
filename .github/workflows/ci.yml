@@ -71,6 +71,51 @@ jobs:
           bam_commands_match_external_goldens_when_samtools_is_available
         working-directory: biohub-rs
 
+  domain-review:
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [comparative, omics]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build pinned domain image
+        run: >-
+          docker build -f containers/Dockerfile.domain
+          --build-arg ENVIRONMENT=${{ matrix.environment }}
+          --tag "biohub-domain-review:${{ matrix.environment }}" .
+      - name: Build and verify public review pack
+        shell: bash
+        run: |
+          mkdir -p validation-evidence
+          chmod 0777 validation-evidence
+          if [[ "${{ matrix.environment }}" == "comparative" ]]; then
+            pack=orthology-codon
+          else
+            pack=statistics
+          fi
+          image="biohub-domain-review:${{ matrix.environment }}"
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo build \
+            --pack "$pack" --output /evidence --keep-failed \
+            --biohub /usr/local/bin/biohub --snakemake /opt/conda/bin/snakemake
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence:ro" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo verify \
+            --pack "$pack" --output /evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: domain-review-${{ matrix.environment }}
+          path: validation-evidence/
+          if-no-files-found: error
+
   security:
     runs-on: ubuntu-latest
     steps:
