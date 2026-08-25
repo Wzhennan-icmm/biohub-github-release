@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -64,6 +65,13 @@ def options() -> argparse.Namespace:
     build.add_argument("--output", help="evidence root; defaults to validation/evidence")
     build.add_argument("--biohub", help="BioHub executable")
     build.add_argument("--snakemake", help="Snakemake executable used by recipe packs")
+    build.add_argument(
+        "--commit",
+        help=(
+            "explicit 40- or 64-character source commit for a clean, read-only "
+            "snapshot where Git is unavailable"
+        ),
+    )
     build.add_argument(
         "--force",
         action="store_true",
@@ -248,6 +256,24 @@ def git_state(root: Path) -> tuple[str, bool]:
         ).stdout.strip()
     )
     return commit, dirty
+
+
+def source_state(root: Path, explicit_commit: str | None) -> tuple[str, bool, str]:
+    if explicit_commit is None:
+        commit, dirty = git_state(root)
+        return commit, dirty, "git-worktree"
+    if not re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", explicit_commit):
+        raise ValidationError("--commit must be a 40- or 64-character hexadecimal hash")
+    return explicit_commit.lower(), False, "explicit-clean-snapshot"
+
+
+def make_evidence_readable(root: Path) -> None:
+    """Add public read/traverse bits so host artifact uploaders can read containers' output."""
+    for path in (root, *root.rglob("*")):
+        if path.is_symlink():
+            continue
+        additions = 0o555 if path.is_dir() else 0o444
+        path.chmod(stat.S_IMODE(path.stat().st_mode) | additions)
 
 
 def run_step(
@@ -569,7 +595,12 @@ def compare_pack(evidence: Path, pack: dict[str, Any]) -> list[tuple[str, str, s
 
 
 def review_document(
-    pack: dict[str, Any], commit: str, dirty: bool, generated_at: str, evidence: Path
+    pack: dict[str, Any],
+    commit: str,
+    dirty: bool,
+    source_state_name: str,
+    generated_at: str,
+    evidence: Path,
 ) -> str:
     input_manifest = sha256_file(evidence / "inputs.sha256")
     output_manifest = sha256_file(evidence / "outputs.sha256")
@@ -581,6 +612,7 @@ def review_document(
 - Title: {pack['title']}
 - Inventory IDs: {inventory}
 - BioHub commit: `{commit}`
+- Source state: `{source_state_name}`
 - Worktree dirty during build: `{str(dirty).lower()}`
 - Evidence generated at: `{generated_at}`
 - Fixture license: `{pack['fixture_license']}`
@@ -647,6 +679,7 @@ def build_pack(
     output_root: Path,
     biohub: Path,
     snakemake: Path | None,
+    explicit_commit: str | None,
     force: bool,
     keep_failed: bool,
 ) -> Path:
@@ -661,7 +694,7 @@ def build_pack(
         source = temporary / "source"
         shutil.copytree(source_pack, source)
         copied_pack = load_pack(source, pack_id)
-        commit, dirty = git_state(root)
+        commit, dirty, source_state_name = source_state(root, explicit_commit)
         generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         environment = os.environ.copy()
         probe_environment = environment.copy()
@@ -733,7 +766,14 @@ def build_pack(
         write_hash_manifest(temporary, output_files, temporary / "outputs.sha256")
         write_hash_manifest(temporary, files_under(source), temporary / "source.sha256")
         (temporary / "review.md").write_text(
-            review_document(copied_pack, commit, dirty, generated_at, temporary),
+            review_document(
+                copied_pack,
+                commit,
+                dirty,
+                source_state_name,
+                generated_at,
+                temporary,
+            ),
             encoding="utf-8",
         )
         metadata = {
@@ -741,6 +781,7 @@ def build_pack(
             "pack_id": pack_id,
             "inventory_ids": copied_pack["inventory_ids"],
             "biohub_commit": commit,
+            "source_state": source_state_name,
             "worktree_dirty": dirty,
             "generated_at": generated_at,
             "automated_status": "passed",
@@ -768,6 +809,7 @@ def build_pack(
         write_hash_manifest(temporary, support_files, temporary / "evidence.sha256")
         if final.exists():
             shutil.rmtree(final)
+        make_evidence_readable(temporary)
         temporary.rename(final)
         return final
     except Exception as error:
@@ -775,6 +817,7 @@ def build_pack(
             failed = output_root / f"{pack_id}.failed"
             if failed.exists():
                 shutil.rmtree(failed)
+            make_evidence_readable(temporary)
             temporary.rename(failed)
             raise ValidationError(f"{error}; failed output retained at {failed}") from error
         shutil.rmtree(temporary, ignore_errors=True)
@@ -848,6 +891,7 @@ def main() -> int:
                 output_root,
                 biohub,
                 snakemake,
+                args.commit,
                 args.force,
                 args.keep_failed,
             )

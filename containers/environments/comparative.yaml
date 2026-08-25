@@ -5,7 +5,8 @@ channels:
 dependencies:
   - coreutils
   - tar
-  - python=3.12
+  # SyRI 1.8.2 is published for Python 3.10/3.11 on Bioconda.
+  - python=3.11
   - snakemake=9.23.1
   - snakemake-executor-plugin-slurm=2.7.1
   - mafft=7.525

@@ -108,6 +108,7 @@ jobs:
             -v "$PWD/validation-evidence:/evidence" \
             --entrypoint python "$image" \
             /repo/tools/validation_review.py --root /repo build \
+            --commit "${GITHUB_SHA}" \
             --pack "$pack" --output /evidence \
             --biohub /usr/local/bin/biohub --snakemake /opt/conda/bin/snakemake
           docker run --rm \

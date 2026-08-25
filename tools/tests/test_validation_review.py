@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,29 @@ class ValidationReviewTests(unittest.TestCase):
         self.assertTrue(validation_review.numeric_close(100.00009, 100.0, 1e-8, 1e-6))
         self.assertFalse(validation_review.numeric_close(100.00011, 100.0, 1e-8, 1e-6))
         self.assertTrue(validation_review.numeric_close(0.0, 0.0, 1e-8, 1e-6))
+
+    def test_explicit_commit_describes_clean_snapshot_without_git(self) -> None:
+        commit, dirty, state = validation_review.source_state(ROOT, "A" * 40)
+        self.assertEqual(commit, "a" * 40)
+        self.assertFalse(dirty)
+        self.assertEqual(state, "explicit-clean-snapshot")
+        with self.assertRaisesRegex(validation_review.ValidationError, "--commit"):
+            validation_review.source_state(ROOT, "not-a-commit")
+
+    def test_evidence_permissions_allow_external_artifact_reader(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "evidence"
+            nested = root / "steps"
+            nested.mkdir(parents=True, mode=0o700)
+            output = nested / "result.tsv"
+            output.write_text("value\n", encoding="utf-8")
+            root.chmod(0o700)
+            nested.chmod(0o700)
+            output.chmod(0o600)
+            validation_review.make_evidence_readable(root)
+            self.assertTrue(root.stat().st_mode & stat.S_IXOTH)
+            self.assertTrue(nested.stat().st_mode & stat.S_IXOTH)
+            self.assertTrue(output.stat().st_mode & stat.S_IROTH)
 
     def test_sign_invariant_score_comparison(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
