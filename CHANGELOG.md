@@ -41,6 +41,8 @@ All notable changes follow [Semantic Versioning](https://semver.org/).
   formatting and dedicated custom-axis margins.
 - Preserve hidden Snakemake logs in downloadable review artifacts and verify the
   uploaded archives before accepting CI domain-review jobs.
+- Bind human approvals to versioned records containing reviewer, date, inventory
+  scope, source commit, manifest hashes, and data-license confirmation.
 - Add structured CFF author/affiliation/ORCID metadata and isolated schema
   validation without downgrading Snakemake's JSON Schema runtime.
 - Split release automation into non-publishing manual preflight and annotated-tag
