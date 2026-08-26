@@ -1,0 +1,100 @@
+from pathlib import Path
+import csv
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+MANIFEST = str(Path(config["pairs_manifest"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required = {"family_id", "pair_id", "candidates_tsv", "callable_bed"}
+if not ROWS or not required.issubset(ROWS[0]):
+    raise ValueError(f"pairs_manifest needs {sorted(required)}")
+
+
+rule all:
+    input:
+        "results/candidate_audit.tsv",
+        "results/pair_rates.tsv",
+        "results/combined_rate.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/family-denovo-rate.tar.gz",
+
+
+rule calculate:
+    input:
+        MANIFEST,
+    output:
+        audit="results/candidate_audit.tsv",
+        pairs="results/pair_rates.tsv",
+        combined="results/combined_rate.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "calculate.py"),
+        tiers=" ".join(f"--tier {value}" for value in config["included_tiers"]),
+        classes=" ".join(f"--evidence-class {value}" for value in config["included_evidence_classes"]),
+        ploidy=int(config["ploidy"]),
+        confidence=float(config["confidence_level"]),
+        require=str(bool(config["require_all_candidates_callable"])).lower(),
+    shell:
+        r"""
+        python3 {params.script:q} --manifest {input:q} {params.tiers} {params.classes} \
+          --ploidy {params.ploidy} --confidence {params.confidence} \
+          --require-callable {params.require:q} --audit {output.audit:q} \
+          --pair-rates {output.pairs:q} --combined {output.combined:q} \
+          --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("pairs_manifest", input[0])]
+        for row in ROWS:
+            items.append((f"candidates/{row['pair_id']}", row["candidates_tsv"]))
+            items.append((f"callable_bed/{row['pair_id']}", row["callable_bed"]))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "family-denovo-rate",
+            "Auditable candidate mutation-rate calculation from pair-specific candidate tables and callable BEDs.",
+            [
+                "BED coordinates are interpreted as zero-based half-open; candidate positions are one-based.",
+                "Overlapping callable intervals are merged before opportunity calculation.",
+                "Numerator tiers, evidence classes, ploidy and confidence level are explicit.",
+                "Every candidate receives callable-status audit; strict mode rejects any non-callable candidate.",
+                "Outputs say candidate unless evidence_class explicitly records experimental confirmation.",
+                "Poisson confidence limits use Garwood exact intervals.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/candidate_audit.tsv",
+        "results/pair_rates.tsv",
+        "results/combined_rate.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/family-denovo-rate.tar.gz",
+    shell:
+        "tar -czf {output:q} results/candidate_audit.tsv results/pair_rates.tsv results/combined_rate.tsv results/README.txt logs/validation.log inputs.manifest.tsv"

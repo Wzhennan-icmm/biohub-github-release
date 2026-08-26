@@ -1,8 +1,23 @@
 cff-version: 1.2.0
 message: "If you use BioHub, please cite its archived release and associated software paper."
+type: software
 title: "BioHub: reproducible command-line utilities for plant genomics"
-version: 0.3.0
+version: 0.4.0
 license: MIT
 repository-code: "https://github.com/Wzhennan-icmm/biohub-github-release"
+abstract: >-
+  BioHub provides reproducible command-line utilities and schema-validated
+  workflow recipes for plant genomics, comparative genomics, assembly,
+  population genomics, variant analysis, transcriptomics, enrichment, and
+  microbiome constrained ordination.
+keywords:
+  - bioinformatics
+  - plant genomics
+  - reproducible workflows
+  - comparative genomics
+  - Snakemake
 authors:
-  - name: "BioHub contributors"
+  - family-names: Wang
+    given-names: Zhennan
+    affiliation: "Institute of Chinese Materia Medica, China Academy of Chinese Medical Sciences"
+    orcid: "https://orcid.org/0000-0003-4883-2538"

@@ -1,0 +1,18 @@
+# Replace every REQUIRED/null value before validation.
+gene_counts: REQUIRED
+tree: REQUIRED
+input_format: orthofinder
+max_family_size: null
+ultrametric_tolerance: null
+cafe_executable: cafe5
+cores: null
+replicates: null
+model_k: null
+root_distribution: null
+error_model: null
+lambda_value: null
+alpha_value: null
+family_pvalue: null
+minimum_converged_replicates: null
+likelihood_tolerance: null
+parameter_cv_tolerance: null

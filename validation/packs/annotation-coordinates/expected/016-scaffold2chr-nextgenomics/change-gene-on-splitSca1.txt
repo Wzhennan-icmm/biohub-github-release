@@ -1,0 +1,6 @@
+ctgS	test	gene	120	150	.	+	.	ID=split_plus
+q
+ctgS	test	gene	320	340	.	+	.	ID=split_minus
+q
+ctgO	test	gene	90	120	.	+	.	ID=out_of_range
+q

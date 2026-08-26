@@ -1,0 +1,121 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+MANIFEST = str(Path(config["runs_manifest"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required_columns = {"run_id", "stage1_ctl", "stage2_ctl"}
+if not ROWS or not required_columns.issubset(ROWS[0]):
+    raise ValueError(f"runs_manifest must contain {sorted(required_columns)}")
+RUN_IDS = [row["run_id"] for row in ROWS]
+if len(RUN_IDS) != len(set(RUN_IDS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in RUN_IDS):
+    raise ValueError("run_id values must be unique safe identifiers")
+RUN_MAP = {row["run_id"]: row for row in ROWS}
+
+
+rule all:
+    input:
+        "results/node_age_summary.tsv",
+        "results/summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/dating-mcmctree.tar.gz",
+
+
+rule mcmctree_run:
+    input:
+        stage1=lambda wildcards: str(Path(RUN_MAP[wildcards.run_id]["stage1_ctl"]).expanduser().resolve()),
+        stage2=lambda wildcards: str(Path(RUN_MAP[wildcards.run_id]["stage2_ctl"]).expanduser().resolve()),
+    output:
+        directory("results/runs/{run_id}"),
+    params:
+        script=str(BASE / "run_mcmctree.py"),
+        executable=config["mcmctree_executable"],
+        expected_loci=int(config["expected_loci"]),
+        log_prefix=lambda wildcards: f"logs/{wildcards.run_id}",
+    shell:
+        r"""
+        python3 {params.script:q} --executable {params.executable:q} \
+          --stage1 {input.stage1:q} --stage2 {input.stage2:q} \
+          --expected-loci {params.expected_loci} --output {output:q} \
+          --log-prefix {params.log_prefix:q}
+        """
+
+
+rule summarize:
+    input:
+        expand("results/runs/{run_id}", run_id=RUN_IDS),
+    output:
+        table="results/node_age_summary.tsv",
+        summary="results/summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        runs="results/runs",
+        run_ids=" ".join(f"--run-id {item}" for item in RUN_IDS),
+        regex=config["age_column_regex"],
+        burnin=int(config["burnin_samples"]),
+        expected=int(config["expected_internal_nodes"]),
+        minimum=float(config["minimum_ess"]),
+    shell:
+        r"""
+        python3 {params.script:q} --runs {params.runs:q} {params.run_ids} \
+          --age-column-regex {params.regex:q} --burnin-samples {params.burnin} \
+          --expected-nodes {params.expected} --minimum-ess {params.minimum} \
+          --output {output.table:q} --summary {output.summary:q} \
+          --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("runs_manifest", input[0])]
+        for row in ROWS:
+            items.append((f"stage1_ctl/{row['run_id']}", row["stage1_ctl"]))
+            items.append((f"stage2_ctl/{row['run_id']}", row["stage2_ctl"]))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "dating-mcmctree",
+            "Two-stage approximate-likelihood MCMCTree runs with per-node posterior summaries.",
+            [
+                "Final control files are validated for ndata and usedata=3 then usedata=2.",
+                "out.BV is copied to in.BV between stages and required outputs are checked.",
+                "Configured age-column pattern must match expected internal-node count.",
+                "ESS threshold is explicit; calibration-bound nodes are not treated as independent sequence support.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/node_age_summary.tsv",
+        "results/summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/dating-mcmctree.tar.gz",
+    shell:
+        "tar -czf {output:q} results logs inputs.manifest.tsv"

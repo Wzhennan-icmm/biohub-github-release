@@ -1,0 +1,176 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+GENOTYPE = str(Path(config["genotype"]).expanduser().resolve())
+TRAITS_MANIFEST = str(Path(config["traits_manifest"]).expanduser().resolve())
+with open(TRAITS_MANIFEST, newline="", encoding="utf-8") as handle:
+    SOURCE_ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required = {"trait_id", "phenotype_file", "phenotype_column"}
+if not SOURCE_ROWS or not required.issubset(SOURCE_ROWS[0]):
+    raise ValueError(f"traits_manifest needs {sorted(required)}")
+TRAITS = [row["trait_id"] for row in SOURCE_ROWS]
+if len(TRAITS) != len(set(TRAITS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in TRAITS):
+    raise ValueError("trait_id values must be unique safe identifiers")
+TRAIT_MAP = {row["trait_id"]: row for row in SOURCE_ROWS}
+COVARIATES = str(Path(config["covariates_file"]).expanduser().resolve()) if config["covariates_file"] else None
+
+
+rule all:
+    input:
+        "results/trait_status.tsv",
+        "results/lead_associations.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/population-gwas.tar.gz",
+
+
+rule validate_inputs:
+    input:
+        traits=TRAITS_MANIFEST,
+    output:
+        traits="results/traits.normalized.tsv",
+        summary="results/input_summary.tsv",
+    params:
+        script=str(BASE / "validate_inputs.py"),
+        kind=config["genotype_kind"],
+        genotype=GENOTYPE,
+        covariates=COVARIATES,
+        complete=str(bool(config["require_complete_samples"])).lower(),
+    run:
+        import subprocess
+        command = [
+            "python3", params.script,
+            "--genotype-kind", str(params.kind),
+            "--genotype", params.genotype,
+            "--traits", input.traits,
+            "--require-complete", params.complete,
+            "--output", output.traits,
+            "--summary", output.summary,
+        ]
+        if params.covariates:
+            command.extend(["--covariates", params.covariates])
+        subprocess.run(command, check=True)
+
+
+rule gwas:
+    input:
+        validation="results/traits.normalized.tsv",
+        phenotype=lambda wildcards: str(Path(TRAIT_MAP[wildcards.trait_id]["phenotype_file"]).expanduser().resolve()),
+    output:
+        directory("results/gwas/{trait_id}"),
+    log:
+        "logs/gwas.{trait_id}.log",
+    params:
+        script=str(BASE / "run_plink.py"),
+        executable=config["plink2_executable"],
+        kind=config["genotype_kind"],
+        genotype=GENOTYPE,
+        phenotype_column=lambda wildcards: TRAIT_MAP[wildcards.trait_id]["phenotype_column"],
+        covariates=COVARIATES,
+        covariate_columns=",".join(config["covariate_columns"]),
+        maf=float(config["minor_allele_frequency"]),
+        geno=float(config["maximum_variant_missingness"]),
+        mind=float(config["maximum_sample_missingness"]),
+        hwe=float(config["hardy_weinberg_pvalue"]),
+    run:
+        import subprocess
+        Path(output[0]).mkdir(parents=True, exist_ok=False)
+        prefix = str(Path(output[0]) / wildcards.trait_id)
+        command = [
+            "python3", params.script,
+            "--executable", str(params.executable),
+            "--genotype-kind", str(params.kind),
+            "--genotype", params.genotype,
+            "--phenotype", input.phenotype,
+            "--phenotype-column", str(params.phenotype_column),
+            "--maf", str(params.maf),
+            "--geno", str(params.geno),
+            "--mind", str(params.mind),
+            "--hwe", str(params.hwe),
+            "--output", prefix,
+            "--log", log[0],
+        ]
+        if params.covariates:
+            command.extend(["--covariates", params.covariates])
+            if params.covariate_columns:
+                command.extend(["--covariate-columns", params.covariate_columns])
+        subprocess.run(command, check=True)
+
+
+rule summarize:
+    input:
+        expand("results/gwas/{trait_id}", trait_id=TRAITS),
+    output:
+        status="results/trait_status.tsv",
+        lead="results/lead_associations.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        ids=" ".join(f"--trait-id {item}" for item in TRAITS),
+        threshold=float(config["significance_threshold"]),
+    shell:
+        r"""
+        python3 {params.script:q} {params.ids} --root results/gwas \
+          --threshold {params.threshold} --output {output.status:q} \
+          --lead {output.lead:q} --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        TRAITS_MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("traits_manifest", input[0])]
+        if config["genotype_kind"] == "vcf":
+            items.append(("genotype", GENOTYPE))
+        else:
+            suffixes = [".pgen", ".pvar", ".psam"] if config["genotype_kind"] == "pfile" else [".bed", ".bim", ".fam"]
+            items.extend((f"genotype{suffix}", GENOTYPE + suffix) for suffix in suffixes)
+        for row in SOURCE_ROWS:
+            items.append((f"phenotype/{row['trait_id']}", row["phenotype_file"]))
+        if COVARIATES:
+            items.append(("covariates", COVARIATES))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "population-gwas",
+            "Manifest-driven PLINK2 single-variant association analysis.",
+            [
+                "Phenotype IID coverage is checked against VCF samples when VCF input is used.",
+                "MAF, missingness, HWE and significance thresholds are explicit configuration values.",
+                "Covariate file and column names are recorded; absence of covariates remains visible.",
+                "Lead table is a mechanical minimum-p summary, not independent locus clumping.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/trait_status.tsv",
+        "results/lead_associations.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/population-gwas.tar.gz",
+    shell:
+        "tar -czf {output:q} results/trait_status.tsv results/lead_associations.tsv results/README.txt logs/validation.log inputs.manifest.tsv"

@@ -1,0 +1,13 @@
+{
+  "foreground_tsv": "{fixtures}/enrichment-foreground.tsv",
+  "background_genes": "{fixtures}/enrichment-background.txt",
+  "associations_tsv": "{fixtures}/enrichment-associations.tsv",
+  "sources": ["GO"],
+  "minimum_term_size": 2,
+  "maximum_term_size": 20,
+  "minimum_overlap": 1,
+  "fdr": 0.05,
+  "adjustment_scope": "set_source",
+  "require_foreground_in_background": true,
+  "plot_top_terms": 5
+}

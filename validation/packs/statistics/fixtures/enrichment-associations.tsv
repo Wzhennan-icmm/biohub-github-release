@@ -1,0 +1,24 @@
+gene_id	term_id	source	term_name
+gene001	GO:0001	GO	response alpha
+gene002	GO:0001	GO	response alpha
+gene003	GO:0001	GO	response alpha
+gene004	GO:0001	GO	response alpha
+gene005	GO:0001	GO	response alpha
+gene006	GO:0002	GO	metabolism beta
+gene007	GO:0002	GO	metabolism beta
+gene008	GO:0002	GO	metabolism beta
+gene009	GO:0002	GO	metabolism beta
+gene010	GO:0002	GO	metabolism beta
+gene010	GO:0003	GO	recovery gamma
+gene011	GO:0003	GO	recovery gamma
+gene012	GO:0003	GO	recovery gamma
+gene013	GO:0003	GO	recovery gamma
+gene014	GO:0003	GO	recovery gamma
+gene001	GO:0004	GO	mixed delta
+gene010	GO:0004	GO	mixed delta
+gene015	GO:0004	GO	mixed delta
+gene016	GO:0004	GO	mixed delta
+gene017	GO:0004	GO	mixed delta
+gene018	GO:0004	GO	mixed delta
+gene019	GO:0004	GO	mixed delta
+gene020	GO:0004	GO	mixed delta

@@ -1,0 +1,13 @@
+# traits_manifest columns: trait_id, phenotype_file
+traits_manifest: REQUIRED
+kmers_table_prefix: REQUIRED
+kmers_gwas_script: REQUIRED
+python2_executable: python2
+kmer_length: null
+threads: null
+minimum_data_points: null
+minor_allele_count: null
+minor_allele_frequency: null
+kmers_number: null
+permutations: null
+permutation_tail_percent: null

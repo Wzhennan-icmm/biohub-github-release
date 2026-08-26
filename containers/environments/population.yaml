@@ -1,0 +1,12 @@
+name: base
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - coreutils
+  - tar
+  - python=3.12
+  - snakemake=9.23.1
+  - snakemake-executor-plugin-slurm=2.7.1
+  - plink2=2.0.0a.6.9
+  - vcftools=0.1.17

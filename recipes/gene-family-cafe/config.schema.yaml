@@ -1,0 +1,49 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - gene_counts
+  - tree
+  - input_format
+  - max_family_size
+  - ultrametric_tolerance
+  - cafe_executable
+  - cores
+  - replicates
+  - model_k
+  - root_distribution
+  - error_model
+  - lambda_value
+  - alpha_value
+  - family_pvalue
+  - minimum_converged_replicates
+  - likelihood_tolerance
+  - parameter_cv_tolerance
+properties:
+  gene_counts: {type: string, minLength: 1}
+  tree: {type: string, minLength: 1}
+  input_format: {type: string, enum: [orthofinder, cafe]}
+  max_family_size: {type: integer, minimum: 1}
+  ultrametric_tolerance: {type: number, minimum: 0}
+  cafe_executable: {type: string, minLength: 1}
+  cores: {type: integer, minimum: 1}
+  replicates: {type: integer, minimum: 1}
+  model_k: {type: integer, minimum: 1}
+  root_distribution: {type: number, exclusiveMinimum: 0}
+  error_model:
+    oneOf:
+      - {type: number, minimum: 0}
+      - {type: string, minLength: 1}
+      - {type: "null"}
+  lambda_value:
+    oneOf:
+      - {type: number, exclusiveMinimum: 0}
+      - {type: "null"}
+  alpha_value:
+    oneOf:
+      - {type: number, exclusiveMinimum: 0}
+      - {type: "null"}
+  family_pvalue: {type: number, minimum: 0, maximum: 1}
+  minimum_converged_replicates: {type: integer, minimum: 1}
+  likelihood_tolerance: {type: number, minimum: 0}
+  parameter_cv_tolerance: {type: number, minimum: 0}

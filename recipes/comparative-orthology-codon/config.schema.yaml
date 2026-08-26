@@ -1,0 +1,21 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - protein_groups_dir
+  - cds_fasta
+  - expected_taxa
+  - biohub_executable
+properties:
+  protein_groups_dir:
+    type: string
+    minLength: 1
+  cds_fasta:
+    type: string
+    minLength: 1
+  expected_taxa:
+    type: integer
+    minimum: 2
+  biohub_executable:
+    type: string
+    minLength: 1

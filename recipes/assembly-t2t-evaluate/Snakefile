@@ -1,0 +1,149 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+MANIFEST = str(Path(config["assemblies_manifest"]).expanduser().resolve())
+REFERENCE = str(Path(config["reference_fasta"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+if not ROWS or not {"assembly_id", "fasta"}.issubset(ROWS[0]):
+    raise ValueError("assemblies_manifest needs assembly_id and fasta columns")
+ASSEMBLIES = [row["assembly_id"] for row in ROWS]
+if len(ASSEMBLIES) != len(set(ASSEMBLIES)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in ASSEMBLIES):
+    raise ValueError("assembly_id values must be unique safe identifiers")
+FASTA = {row["assembly_id"]: str(Path(row["fasta"]).expanduser().resolve()) for row in ROWS}
+
+
+rule all:
+    input:
+        "results/assembly_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/assembly-t2t-evaluate.tar.gz",
+
+
+rule inspect_assembly:
+    input:
+        lambda wildcards: FASTA[wildcards.assembly_id],
+    output:
+        sequences="results/stats/{assembly_id}.sequences.tsv",
+        summary="results/stats/{assembly_id}.summary.tsv",
+    params:
+        script=str(BASE / "inspect_fasta.py"),
+        minimum=int(config["minimum_contig_length"]),
+        motif=config["telomere_motif"],
+        window=int(config["telomere_window_bp"]),
+        hits=int(config["minimum_telomere_hits"]),
+    shell:
+        r"""
+        python3 {params.script:q} --assembly-id {wildcards.assembly_id:q} --fasta {input:q} \
+          --minimum-contig-length {params.minimum} --telomere-motif {params.motif:q} \
+          --telomere-window {params.window} --minimum-telomere-hits {params.hits} \
+          --sequences {output.sequences:q} --summary {output.summary:q}
+        """
+
+
+rule align_reference:
+    input:
+        query=lambda wildcards: FASTA[wildcards.assembly_id],
+        reference=REFERENCE,
+    output:
+        "results/paf/{assembly_id}.paf",
+    log:
+        "logs/minimap2.{assembly_id}.log",
+    params:
+        executable=config["minimap2_executable"],
+        preset=config["minimap_preset"],
+        threads=int(config["threads"]),
+    shell:
+        r"""
+        {params.executable:q} -x {params.preset:q} -t {params.threads} \
+          {input.reference:q} {input.query:q} > {output:q} 2> {log:q}
+        """
+
+
+rule summarize_paf:
+    input:
+        paf="results/paf/{assembly_id}.paf",
+        query=lambda wildcards: FASTA[wildcards.assembly_id],
+        target=REFERENCE,
+    output:
+        "results/paf_summary/{assembly_id}.tsv",
+    params:
+        script=str(BASE / "summarize_paf.py"),
+    shell:
+        r"""
+        python3 {params.script:q} --assembly-id {wildcards.assembly_id:q} \
+          --paf {input.paf:q} --query-fasta {input.query:q} \
+          --target-fasta {input.target:q} --output {output:q}
+        """
+
+
+rule combine:
+    input:
+        stats=expand("results/stats/{assembly_id}.summary.tsv", assembly_id=ASSEMBLIES),
+        paf=expand("results/paf_summary/{assembly_id}.tsv", assembly_id=ASSEMBLIES),
+    output:
+        table="results/assembly_summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "combine.py"),
+        ids=" ".join(f"--assembly-id {item}" for item in ASSEMBLIES),
+        expected=int(config["expected_chromosomes"]),
+    shell:
+        r"""
+        python3 {params.script:q} {params.ids} --stats-dir results/stats \
+          --paf-dir results/paf_summary --expected-chromosomes {params.expected} \
+          --output {output.table:q} --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        MANIFEST,
+        REFERENCE,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("assemblies_manifest", input[0]), ("reference_fasta", input[1])]
+        items.extend((f"assembly/{row['assembly_id']}", row["fasta"]) for row in ROWS)
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "assembly-t2t-evaluate",
+            "Assembly inventory, telomere-end evidence and reference-alignment summary.",
+            [
+                "FASTA IDs are unique and sequence metrics are calculated directly from input.",
+                "Telomere motif, window and hit threshold are explicit configuration values.",
+                "PAF coverage uses interval unions rather than summed overlapping blocks.",
+                "Reference identity and expected chromosome count remain visible in config and outputs.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/assembly_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/assembly-t2t-evaluate.tar.gz",
+    shell:
+        "tar -czf {output:q} results logs inputs.manifest.tsv"

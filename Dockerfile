@@ -12,6 +12,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/release/biohub /usr/local/bin/biohub
 COPY r /usr/local/share/biohub/r
+COPY recipes /usr/local/share/biohub/recipes
 COPY examples /usr/local/share/biohub/examples
+COPY LICENSE NOTICE /usr/local/share/doc/biohub/
 ENTRYPOINT ["biohub"]
 CMD ["--help"]

@@ -1,0 +1,12 @@
+# counts_matrix: first column gene_id, remaining columns sample IDs.
+# samples_tsv: sample_id plus every variable named by design.
+# contrasts_manifest: contrast_id, factor, numerator, denominator.
+counts_matrix: REQUIRED
+samples_tsv: REQUIRED
+contrasts_manifest: REQUIRED
+design: REQUIRED
+minimum_count: null
+minimum_samples: null
+alpha: null
+minimum_absolute_log2_fold_change: null
+independent_filtering: true

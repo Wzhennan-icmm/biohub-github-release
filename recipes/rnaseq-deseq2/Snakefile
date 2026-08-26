@@ -1,0 +1,113 @@
+from pathlib import Path
+import subprocess
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+COUNTS = str(Path(config["counts_matrix"]).expanduser().resolve())
+SAMPLES = str(Path(config["samples_tsv"]).expanduser().resolve())
+CONTRASTS = str(Path(config["contrasts_manifest"]).expanduser().resolve())
+
+
+rule all:
+    input:
+        "results/differential_expression.tsv",
+        "results/contrast_summary.tsv",
+        "results/normalized_counts.tsv",
+        "results/sample_qc.tsv",
+        "results/README.txt",
+        "report/sample_pca.pdf",
+        "logs/deseq2.log",
+        "inputs.manifest.tsv",
+        "report/rnaseq-deseq2.tar.gz",
+
+
+rule deseq2:
+    input:
+        counts=COUNTS,
+        samples=SAMPLES,
+        contrasts=CONTRASTS,
+    output:
+        differential="results/differential_expression.tsv",
+        summary="results/contrast_summary.tsv",
+        normalized="results/normalized_counts.tsv",
+        qc="results/sample_qc.tsv",
+        pca="report/sample_pca.pdf",
+        log="logs/deseq2.log",
+    params:
+        script=str(BASE / "run_deseq2.R"),
+    run:
+        subprocess.run(
+            [
+                "Rscript", params.script,
+                "--counts", input.counts,
+                "--samples", input.samples,
+                "--contrasts", input.contrasts,
+                "--design", str(config["design"]),
+                "--minimum-count", str(config["minimum_count"]),
+                "--minimum-samples", str(config["minimum_samples"]),
+                "--alpha", str(config["alpha"]),
+                "--minimum-absolute-log2-fold-change", str(config["minimum_absolute_log2_fold_change"]),
+                "--independent-filtering", str(bool(config["independent_filtering"])).lower(),
+                "--differential", output.differential,
+                "--contrast-summary", output.summary,
+                "--normalized-counts", output.normalized,
+                "--sample-qc", output.qc,
+                "--pca", output.pca,
+                "--log", output.log,
+            ],
+            check=True,
+        )
+
+
+rule input_manifest:
+    input:
+        COUNTS,
+        SAMPLES,
+        CONTRASTS,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        write_input_manifest(
+            [("counts_matrix", input[0]), ("samples_tsv", input[1]), ("contrasts_manifest", input[2])],
+            output[0],
+        )
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "rnaseq-deseq2",
+            "Design-aware DESeq2 differential-expression analysis from raw integer counts.",
+            [
+                "Count and metadata sample sets must match exactly.",
+                "Design variables, contrast levels and full-rank model matrix are validated.",
+                "Count filter, FDR alpha, fold-change threshold and independent filtering are explicit.",
+                "Significant means padj <= alpha and absolute log2 fold change meets configured threshold.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/differential_expression.tsv",
+        "results/contrast_summary.tsv",
+        "results/normalized_counts.tsv",
+        "results/sample_qc.tsv",
+        "results/README.txt",
+        "report/sample_pca.pdf",
+        "logs/deseq2.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/rnaseq-deseq2.tar.gz",
+    shell:
+        "tar -czf {output:q} {input:q}"

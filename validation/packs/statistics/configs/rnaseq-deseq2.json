@@ -1,0 +1,11 @@
+{
+  "counts_matrix": "{fixtures}/rnaseq-counts.tsv",
+  "samples_tsv": "{fixtures}/rnaseq-samples.tsv",
+  "contrasts_manifest": "{fixtures}/rnaseq-contrasts.tsv",
+  "design": "~ batch + condition",
+  "minimum_count": 10,
+  "minimum_samples": 3,
+  "alpha": 0.05,
+  "minimum_absolute_log2_fold_change": 1.0,
+  "independent_filtering": true
+}

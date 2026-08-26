@@ -1,0 +1,21 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - vcf
+  - comparisons_manifest
+  - vcftools_executable
+  - window_size_bp
+  - window_step_bp
+  - minor_allele_frequency
+  - minimum_site_call_rate
+  - candidate_fst_threshold
+properties:
+  vcf: {type: string, minLength: 1}
+  comparisons_manifest: {type: string, minLength: 1}
+  vcftools_executable: {type: string, minLength: 1}
+  window_size_bp: {type: integer, minimum: 1}
+  window_step_bp: {type: integer, minimum: 1}
+  minor_allele_frequency: {type: number, minimum: 0, maximum: 0.5}
+  minimum_site_call_rate: {type: number, minimum: 0, maximum: 1}
+  candidate_fst_threshold: {type: number}

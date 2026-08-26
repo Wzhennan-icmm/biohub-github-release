@@ -1,0 +1,140 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+VCF = str(Path(config["vcf"]).expanduser().resolve())
+MANIFEST = str(Path(config["comparisons_manifest"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required = {"comparison_id", "population1_samples", "population2_samples"}
+if not ROWS or not required.issubset(ROWS[0]):
+    raise ValueError(f"comparisons_manifest needs {sorted(required)}")
+COMPARISONS = [row["comparison_id"] for row in ROWS]
+if len(COMPARISONS) != len(set(COMPARISONS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in COMPARISONS):
+    raise ValueError("comparison_id values must be unique safe identifiers")
+COMPARISON_MAP = {row["comparison_id"]: row for row in ROWS}
+
+
+rule all:
+    input:
+        "results/candidate_fst_windows.tsv",
+        "results/comparison_summary.tsv",
+        "results/nucleotide_diversity_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/population-selection.tar.gz",
+
+
+rule validate_inputs:
+    input:
+        vcf=VCF,
+        manifest=MANIFEST,
+    output:
+        manifest="results/comparisons.normalized.tsv",
+        summary="results/input_summary.tsv",
+    params:
+        script=str(BASE / "validate.py"),
+    shell:
+        "python3 {params.script:q} --vcf {input.vcf:q} --manifest {input.manifest:q} --output {output.manifest:q} --summary {output.summary:q}"
+
+
+rule selection_statistics:
+    input:
+        validation="results/comparisons.normalized.tsv",
+        vcf=VCF,
+        pop1=lambda wildcards: str(Path(COMPARISON_MAP[wildcards.comparison_id]["population1_samples"]).expanduser().resolve()),
+        pop2=lambda wildcards: str(Path(COMPARISON_MAP[wildcards.comparison_id]["population2_samples"]).expanduser().resolve()),
+    output:
+        directory("results/comparisons/{comparison_id}"),
+    log:
+        "logs/{comparison_id}.vcftools.log",
+    params:
+        script=str(BASE / "run_vcftools.py"),
+        executable=config["vcftools_executable"],
+        window=int(config["window_size_bp"]),
+        step=int(config["window_step_bp"]),
+        maf=float(config["minor_allele_frequency"]),
+        call_rate=float(config["minimum_site_call_rate"]),
+    shell:
+        r"""
+        python3 {params.script:q} --executable {params.executable:q} --vcf {input.vcf:q} \
+          --pop1 {input.pop1:q} --pop2 {input.pop2:q} --window {params.window} \
+          --step {params.step} --maf {params.maf} --max-missing {params.call_rate} \
+          --output {output:q} --log {log:q}
+        """
+
+
+rule summarize:
+    input:
+        expand("results/comparisons/{comparison_id}", comparison_id=COMPARISONS),
+    output:
+        candidates="results/candidate_fst_windows.tsv",
+        summary="results/comparison_summary.tsv",
+        pi="results/nucleotide_diversity_summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        ids=" ".join(f"--comparison-id {item}" for item in COMPARISONS),
+        threshold=float(config["candidate_fst_threshold"]),
+    shell:
+        r"""
+        python3 {params.script:q} {params.ids} --root results/comparisons \
+          --threshold {params.threshold} --output {output.candidates:q} \
+          --summary {output.summary:q} --pi-summary {output.pi:q} \
+          --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        VCF,
+        MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("vcf", input[0]), ("comparisons_manifest", input[1])]
+        for row in ROWS:
+            items.append((f"population1/{row['comparison_id']}", row["population1_samples"]))
+            items.append((f"population2/{row['comparison_id']}", row["population2_samples"]))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "population-selection",
+            "Windowed Weir-Cockerham FST and per-population nucleotide-diversity calculations.",
+            [
+                "Population sample lists are disjoint and all IDs occur in the VCF.",
+                "Window size, step, MAF, call-rate and candidate threshold are explicit.",
+                "Negative FST values remain in raw output; candidate selection uses configured threshold.",
+                "Candidate windows are screening results, not proof of selection.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/candidate_fst_windows.tsv",
+        "results/comparison_summary.tsv",
+        "results/nucleotide_diversity_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/population-selection.tar.gz",
+    shell:
+        "tar -czf {output:q} results/candidate_fst_windows.tsv results/comparison_summary.tsv results/nucleotide_diversity_summary.tsv results/README.txt logs/validation.log inputs.manifest.tsv"

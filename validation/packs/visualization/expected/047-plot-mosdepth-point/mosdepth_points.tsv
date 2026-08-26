@@ -1,0 +1,4 @@
+chrom	start	end	coverage	status
+chr2	0	100	5	OK
+chr1	0	100	10	OK
+chr1	100	200	20	OK

@@ -1,0 +1,31 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - foreground_tsv
+  - background_genes
+  - associations_tsv
+  - sources
+  - minimum_term_size
+  - maximum_term_size
+  - minimum_overlap
+  - fdr
+  - adjustment_scope
+  - require_foreground_in_background
+  - plot_top_terms
+properties:
+  foreground_tsv: {type: string, minLength: 1}
+  background_genes: {type: string, minLength: 1}
+  associations_tsv: {type: string, minLength: 1}
+  sources:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  minimum_term_size: {type: integer, minimum: 1}
+  maximum_term_size: {type: integer, minimum: 1}
+  minimum_overlap: {type: integer, minimum: 1}
+  fdr: {type: number, exclusiveMinimum: 0, maximum: 1}
+  adjustment_scope: {type: string, enum: [set_source, set, global]}
+  require_foreground_in_background: {type: boolean}
+  plot_top_terms: {type: integer, minimum: 1}

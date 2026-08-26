@@ -1,0 +1,13 @@
+# pairs_manifest columns: pair_id, reference_fasta, query_fasta
+pairs_manifest: REQUIRED
+require_matching_sequence_ids: true
+minimap2_executable: minimap2
+minimap_preset: asm20
+threads: null
+minimum_alignment_length: null
+minimum_mapq: null
+syri_executable: syri
+syri_cores: null
+syri_use_filtered_paf: false
+syri_include_cigar: true
+syri_include_snps: false

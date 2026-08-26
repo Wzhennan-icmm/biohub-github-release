@@ -1,0 +1,13 @@
+# traits_manifest columns: trait_id, phenotype_file, phenotype_column
+genotype_kind: vcf
+genotype: REQUIRED
+traits_manifest: REQUIRED
+covariates_file: null
+covariate_columns: []
+require_complete_samples: true
+plink2_executable: plink2
+minor_allele_frequency: null
+maximum_variant_missingness: null
+maximum_sample_missingness: null
+hardy_weinberg_pvalue: null
+significance_threshold: null

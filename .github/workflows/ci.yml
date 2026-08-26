@@ -7,8 +7,28 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
+  recipes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+      - name: Validate Citation File Format in isolated environment
+        run: |
+          python -m venv .venv-cff
+          .venv-cff/bin/python -m pip install --disable-pip-version-check -r requirements-cff.txt
+          .venv-cff/bin/cffconvert --validate
+      - run: python tools/validate_recipes.py
+      - run: python tools/validate_release.py
+      - run: python -m unittest discover -s tools/tests -v
+      - run: python tools/snakemake_smoke.py
+      - run: python tools/snakemake_smoke.py --execute-safe --recipe family-denovo-rate
+
   rust:
     strategy:
       fail-fast: false
@@ -20,14 +40,156 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: python3 tools/validate_recipes.py
+        working-directory: .
       - run: cargo fmt --check
         working-directory: biohub-rs
-      - run: cargo clippy --locked -- -D warnings
+      - run: cargo clippy --locked --all-targets -- -D warnings
         working-directory: biohub-rs
       - run: cargo test --locked
         working-directory: biohub-rs
+      - name: Build command/visual review evidence
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python3 tools/validation_review.py build --pack annotation-coordinates --biohub biohub-rs/target/debug/biohub
+          python3 tools/validation_review.py verify --pack annotation-coordinates
+          python3 tools/validation_review.py build --pack visualization --biohub biohub-rs/target/debug/biohub
+          python3 tools/validation_review.py verify --pack visualization
+      - name: Stage core review artifacts with pack directories
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p "${RUNNER_TEMP}/domain-review-annotation-coordinates"
+          mkdir -p "${RUNNER_TEMP}/domain-review-visualization"
+          cp -R validation/evidence/annotation-coordinates \
+            "${RUNNER_TEMP}/domain-review-annotation-coordinates/"
+          cp -R validation/evidence/visualization \
+            "${RUNNER_TEMP}/domain-review-visualization/"
+      - name: Upload annotation-coordinates review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-review-annotation-coordinates
+          path: ${{ runner.temp }}/domain-review-annotation-coordinates/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+      - name: Upload visualization review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-review-visualization
+          path: ${{ runner.temp }}/domain-review-visualization/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+      - name: Download annotation-coordinates review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: domain-review-annotation-coordinates
+          path: ${{ runner.temp }}/downloaded-domain-reviews
+      - name: Download visualization review evidence
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: domain-review-visualization
+          path: ${{ runner.temp }}/downloaded-domain-reviews
+      - name: Verify downloaded core review evidence
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python3 tools/validation_review.py verify --pack annotation-coordinates \
+            --output "${RUNNER_TEMP}/downloaded-domain-reviews"
+          python3 tools/validation_review.py verify --pack visualization \
+            --output "${RUNNER_TEMP}/downloaded-domain-reviews"
       - run: cargo run --locked -- catalog --format json > /tmp/catalog.json
         working-directory: biohub-rs
+
+  external-goldens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes samtools
+      - run: >-
+          BIOHUB_REQUIRE_EXTERNAL_GOLDENS=1 cargo test --locked
+          --test publication_goldens
+          bam_commands_match_external_goldens_when_samtools_is_available
+        working-directory: biohub-rs
+
+  domain-review:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: comparative
+            pack: orthology-codon
+          - environment: omics
+            pack: statistics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build pinned domain image
+        run: >-
+          docker build -f containers/Dockerfile.domain
+          --build-arg ENVIRONMENT=${{ matrix.environment }}
+          --tag "biohub-domain-review:${{ matrix.environment }}" .
+      - name: Build and verify public review pack
+        shell: bash
+        run: |
+          mkdir -p validation-evidence
+          chmod 0777 validation-evidence
+          pack="${{ matrix.pack }}"
+          image="biohub-domain-review:${{ matrix.environment }}"
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo build \
+            --commit "${GITHUB_SHA}" \
+            --pack "$pack" --output /evidence --keep-failed \
+            --biohub /usr/local/bin/biohub --snakemake /opt/conda/bin/snakemake
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/validation-evidence:/evidence:ro" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo verify \
+            --pack "$pack" --output /evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: domain-review-${{ matrix.pack }}
+          path: validation-evidence/
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 30
+      - uses: actions/download-artifact@v4
+        if: success()
+        with:
+          name: domain-review-${{ matrix.pack }}
+          path: downloaded-validation-evidence
+      - name: Verify downloaded public review pack
+        if: success()
+        shell: bash
+        run: |
+          pack="${{ matrix.pack }}"
+          image="biohub-domain-review:${{ matrix.environment }}"
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -v "$PWD/downloaded-validation-evidence:/evidence:ro" \
+            --entrypoint python "$image" \
+            /repo/tools/validation_review.py --root /repo verify \
+            --pack "$pack" --output /evidence
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: biohub-rs
 
   container:
     runs-on: ubuntu-latest
@@ -37,6 +199,7 @@ jobs:
       - run: docker build --tag biohub:test .
       - run: docker run --rm biohub:test catalog --format json
       - run: docker run --rm biohub:test doctor --json
+      - run: docker run --rm biohub:test recipe list --format json
       - run: >-
           docker run --rm biohub:test run dotplot
           --input /usr/local/share/biohub/examples/dotplot/input.paf
@@ -45,3 +208,7 @@ jobs:
           docker run --rm biohub:test run dotplot
           --input /usr/local/share/biohub/examples/dotplot/input.coords
           --output /tmp/dotplot.png --format coords
+      - run: >-
+          docker run --rm biohub:test run psmc-plot
+          --input /usr/local/share/biohub/examples/psmc/merged.tsv
+          --output /tmp/psmc.pdf --x-scale log10 --y-scale log10

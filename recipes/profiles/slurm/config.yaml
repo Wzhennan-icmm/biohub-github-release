@@ -1,0 +1,4 @@
+# Conservative portable default. Copy profile and add site-specific resources.
+executor: slurm
+jobs: 1
+default-resources: []

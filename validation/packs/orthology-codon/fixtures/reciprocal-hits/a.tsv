@@ -1,0 +1,5 @@
+taxA_gene	taxB_gene
+taxB_gene	taxA_gene
+taxC_gene	taxA_gene
+excludedD	excludedE
+excludedE	excludedD

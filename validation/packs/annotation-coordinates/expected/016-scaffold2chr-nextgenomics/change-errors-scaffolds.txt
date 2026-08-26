@@ -1,0 +1,2 @@
+chr3	2000	x	ctgS	x	+	101	200
+chr4	500	x	ctgS	x	-	301	400

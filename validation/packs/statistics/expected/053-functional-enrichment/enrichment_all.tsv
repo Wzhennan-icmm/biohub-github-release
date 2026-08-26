@@ -1,0 +1,8 @@
+set_id	source	term_id	term_name	background_size	term_size	foreground_size	overlap_size	fold_enrichment	pvalue	padj	significant	overlap_genes
+recovery	GO	GO:0003	recovery gamma	20	5	4	4	4	0.00103199174406605	0.00309597523219814	TRUE	gene010,gene011,gene012,gene013
+stress	GO	GO:0001	response alpha	20	5	5	4	3.2	0.00490196078431373	0.0196078431372549	TRUE	gene001,gene002,gene003,gene004
+stress	GO	GO:0004	mixed delta	20	8	5	2	1	0.693498452012384	0.806308049535604	FALSE	gene001,gene010
+stress	GO	GO:0002	metabolism beta	20	5	5	1	0.8	0.806308049535604	0.806308049535604	FALSE	gene010
+stress	GO	GO:0003	recovery gamma	20	5	5	1	0.8	0.806308049535604	0.806308049535604	FALSE	gene010
+recovery	GO	GO:0002	metabolism beta	20	5	4	1	1	0.718266253869969	0.897832817337461	FALSE	gene010
+recovery	GO	GO:0004	mixed delta	20	8	4	1	0.625	0.897832817337461	0.897832817337461	FALSE	gene010

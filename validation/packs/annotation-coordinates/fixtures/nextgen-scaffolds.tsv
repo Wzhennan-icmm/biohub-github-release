@@ -1,0 +1,6 @@
+chr1	100	x	ctgP	x	+	1	1000
+chr2	500	x	ctgM	x	-	1	100
+chr3	1000	x	ctgS	x	+	1	100
+chr3	2000	x	ctgS	x	+	101	200
+chr4	500	x	ctgS	x	-	301	400
+chr5	1	x	ctgO	x	+	1	100

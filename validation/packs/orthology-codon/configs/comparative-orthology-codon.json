@@ -1,0 +1,6 @@
+{
+  "protein_groups_dir": "{fixtures}/protein-groups",
+  "cds_fasta": "{fixtures}/cds.fasta",
+  "expected_taxa": 3,
+  "biohub_executable": "{biohub}"
+}

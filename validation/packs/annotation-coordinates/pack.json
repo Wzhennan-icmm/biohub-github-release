@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "pack_id": "annotation-coordinates",
+  "title": "GFF3 identifiers, hierarchy, strand, and coordinate transforms",
+  "inventory_ids": ["014", "015", "016"],
+  "fixture_license": "CC0-1.0 synthetic fixture",
+  "acceptance": [
+    "GFF3 record order, feature type, ID, Parent, phase, strand, and coordinates match the reviewed reference exactly.",
+    "Forward and reverse mappings use 1-based closed intervals and preserve interval length.",
+    "Split-scaffold, out-of-range, and unmapped records appear in their declared output or audit log without silent loss."
+  ],
+  "manual_checks": [
+    "Inspect every output ID/Parent relationship and confirm multi-part CDS semantics.",
+    "Recalculate forward and reverse boundary coordinates from fixture mapping rows.",
+    "Confirm split-scaffold and unmapped audit files make exclusions visible."
+  ],
+  "reference_commands": [
+    "diff -u source/expected/014-convert-gemoma-gff3/converted.gff3 steps/014-convert-gemoma-gff3/converted.gff3",
+    "diff -u source/expected/015-contigs2chr-pasa/converted.gff3 steps/015-contigs2chr-pasa/converted.gff3",
+    "diff -ru source/expected/016-scaffold2chr-nextgenomics steps/016-scaffold2chr-nextgenomics"
+  ],
+  "steps": [
+    {
+      "id": "014-convert-gemoma-gff3",
+      "runner": "biohub",
+      "args": [
+        "run", "convert-gemoma-gff3",
+        "-i", "{fixtures}/gemoma.gff3",
+        "-o", "{output}/converted.gff3"
+      ],
+      "outputs": ["converted.gff3"],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "converted.gff3",
+          "expected": "expected/014-convert-gemoma-gff3/converted.gff3"
+        }
+      ]
+    },
+    {
+      "id": "015-contigs2chr-pasa",
+      "runner": "biohub",
+      "args": [
+        "run", "convert-gene-annotation-contigs2chr-PASA",
+        "-gff", "{fixtures}/pasa-contigs.gff3",
+        "-b", "{fixtures}/pasa-contigs.map",
+        "-o", "{output}/converted.gff3"
+      ],
+      "outputs": ["converted.gff3"],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "converted.gff3",
+          "expected": "expected/015-contigs2chr-pasa/converted.gff3"
+        }
+      ]
+    },
+    {
+      "id": "016-scaffold2chr-nextgenomics",
+      "runner": "biohub",
+      "args": [
+        "run", "convert-gene-annotation-scaffold2chr-nextgenomics",
+        "-gff", "{fixtures}/nextgen-scaffolds.gff3",
+        "-b", "{fixtures}/nextgen-scaffolds.tsv",
+        "-o", "{output}/converted.gff3"
+      ],
+      "outputs": [
+        "converted.gff3",
+        "change-annot.log",
+        "change-errors-scaffolds.txt",
+        "change-gene-on-splitSca.txt",
+        "change-gene-on-splitSca1.txt"
+      ],
+      "checks": [
+        {
+          "type": "exact",
+          "path": "converted.gff3",
+          "expected": "expected/016-scaffold2chr-nextgenomics/converted.gff3"
+        },
+        {
+          "type": "exact",
+          "path": "change-annot.log",
+          "expected": "expected/016-scaffold2chr-nextgenomics/change-annot.log"
+        },
+        {
+          "type": "exact",
+          "path": "change-errors-scaffolds.txt",
+          "expected": "expected/016-scaffold2chr-nextgenomics/change-errors-scaffolds.txt"
+        },
+        {
+          "type": "exact",
+          "path": "change-gene-on-splitSca.txt",
+          "expected": "expected/016-scaffold2chr-nextgenomics/change-gene-on-splitSca.txt"
+        },
+        {
+          "type": "exact",
+          "path": "change-gene-on-splitSca1.txt",
+          "expected": "expected/016-scaffold2chr-nextgenomics/change-gene-on-splitSca1.txt"
+        }
+      ]
+    }
+  ]
+}

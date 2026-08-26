@@ -9,9 +9,11 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod recipe;
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-const VERSION: &str = "0.3.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 static PROTECT_OUTPUTS: AtomicBool = AtomicBool::new(false);
 
 fn print_help() {
@@ -33,9 +35,10 @@ Commands:
   stats coverage-ratio   -i <input> -r <reference> [-o <output>]
   stats hic-matrix-reindex -b <bed> -m <matrix> -p <group> [-o <output>]
   stats wgcna-weight     -i <weight-file> [-o <output>]
-  catalog [--format table|json]
+  catalog [--format table|json] [--kind all|command|recipe]
   run <script-id> [options] [--force]
-  doctor [--strict] [--json]
+  doctor [--strict] [--json] [--recipe <recipe-id>]
+  recipe list|describe|init|validate|run|report
   r list
   r run dotplot --input <paf-or-coords> --output <pdf-or-png> [--format paf|coords]
   scripts catalog
@@ -92,6 +95,12 @@ fn open_writer(path: Option<&str>) -> Result<Box<dyn Write>> {
             Ok(Box::new(BufWriter::new(fh)))
         }
     }
+}
+
+fn sorted_string_keys<V>(map: &HashMap<String, V>) -> Vec<&String> {
+    let mut keys: Vec<&String> = map.keys().collect();
+    keys.sort();
+    keys
 }
 
 fn parse_required(args: &[String], idx: &mut usize, flag: &str) -> Result<String> {
@@ -172,6 +181,17 @@ fn svg_color(idx: usize) -> &'static str {
     SVGPLOT_COLORS[idx % SVGPLOT_COLORS.len()]
 }
 
+fn format_svg_tick(value: f64) -> String {
+    let magnitude = value.abs();
+    if magnitude >= 1_000_000.0 || (magnitude > 0.0 && magnitude < 0.001) {
+        format!("{value:.3e}")
+    } else if magnitude >= 1_000.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.3}")
+    }
+}
+
 fn downsample<T: Clone>(data: &[T], max_points: usize) -> Vec<T> {
     if data.len() <= max_points {
         return data.to_vec();
@@ -218,10 +238,11 @@ fn write_scatter_svg(
         y_max += 1.0;
     }
 
+    let has_custom_x_ticks = options.custom_x_ticks.is_some();
     let margin_left = 80.0;
-    let margin_right = 24.0;
+    let margin_right = if has_custom_x_ticks { 64.0 } else { 32.0 };
     let margin_top = 52.0;
-    let margin_bottom = 64.0;
+    let margin_bottom = if has_custom_x_ticks { 96.0 } else { 64.0 };
 
     let w = options.width as f64;
     let h = options.height as f64;
@@ -264,6 +285,7 @@ fn write_scatter_svg(
         let ratio = i as f64 / x_ticks as f64;
         let x = margin_left + ratio * plot_w;
         let value = x_min + ratio * (x_max - x_min);
+        let label = format_svg_tick(value);
         writeln!(
             out,
             "<line x1=\"{x}\" y1=\"{t}\" x2=\"{x}\" y2=\"{y2}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
@@ -272,10 +294,10 @@ fn write_scatter_svg(
         )?;
         writeln!(
             out,
-            "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"middle\" fill=\"#333\">{value:.3}</text>",
+            "<text x=\"{x}\" y=\"{yt}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"middle\" fill=\"#333\">{label}</text>",
             x = x,
             yt = margin_top + plot_h + 22.0,
-            value = value
+            label = label
         )?;
     }
 
@@ -306,6 +328,7 @@ fn write_scatter_svg(
         let ratio = i as f64 / y_ticks as f64;
         let y = margin_top + plot_h - ratio * plot_h;
         let value = y_min + ratio * (y_max - y_min);
+        let label = format_svg_tick(value);
         writeln!(
             out,
             "<line x1=\"{l}\" y1=\"{y}\" x2=\"{r}\" y2=\"{y}\" stroke=\"#ddd\" stroke-width=\"1\"/>",
@@ -314,10 +337,10 @@ fn write_scatter_svg(
         )?;
         writeln!(
             out,
-            "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"end\" dy=\"4\" fill=\"#333\">{value:.3}</text>",
+            "<text x=\"{x}\" y=\"{y}\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"11\" text-anchor=\"end\" dy=\"4\" fill=\"#333\">{label}</text>",
             x = margin_left - 8.0,
             y = y,
-            value = value
+            label = label
         )?;
     }
 
@@ -472,8 +495,9 @@ fn script_category(id: &str) -> &'static str {
 
 fn script_backend(id: &str) -> &'static str {
     match id {
-        "dotplot" => "r",
-        "orthofiner-to-pal2nal"
+        "dotplot" | "psmc-plot" => "r",
+        "orthofinder-to-pal2nal"
+        | "orthofiner-to-pal2nal"
         | "merge-two-end-bam"
         | "merge-two-end-bam1"
         | "merge-two-end-bam-forMGI" => "rust+external",
@@ -483,8 +507,8 @@ fn script_backend(id: &str) -> &'static str {
 
 fn script_dependencies(id: &str) -> &'static [&'static str] {
     match id {
-        "dotplot" => &["Rscript"],
-        "orthofiner-to-pal2nal" => &["mafft", "pal2nal.pl"],
+        "dotplot" | "psmc-plot" => &["Rscript"],
+        "orthofinder-to-pal2nal" | "orthofiner-to-pal2nal" => &["mafft", "pal2nal.pl"],
         "merge-two-end-bam" | "merge-two-end-bam1" | "merge-two-end-bam-forMGI" => &["samtools"],
         _ => &[],
     }
@@ -493,6 +517,7 @@ fn script_dependencies(id: &str) -> &'static [&'static str] {
 fn r_script_path(id: &str) -> Result<PathBuf> {
     let file = match id {
         "dotplot" => "dotplot.R",
+        "psmc-plot" => "psmc_plot.R",
         _ => return Err(format!("unknown R command: {id}").into()),
     };
     if let Ok(dir) = env::var("BIOHUB_R_DIR") {
@@ -531,6 +556,7 @@ fn run_r(args: &[String]) -> i32 {
     }
     if args.is_empty() || args[0] == "list" {
         println!("dotplot\tPAF/MUMmer coordinate static dot plot\tRscript");
+        println!("psmc-plot\tPSMC demographic trajectory plot\tRscript");
         return 0;
     }
     if args[0] != "run" || args.len() < 2 {
@@ -559,28 +585,42 @@ fn run_r(args: &[String]) -> i32 {
 }
 
 fn print_script_catalog_json() {
+    let objects = script_catalog_json_objects();
     println!("[");
-    let specs = load_script_catalog();
-    for (index, spec) in specs.iter().enumerate() {
+    for (index, object) in objects.iter().enumerate() {
+        println!(
+            "  {}{}",
+            object,
+            if index + 1 == objects.len() { "" } else { "," }
+        );
+    }
+    println!("]");
+}
+
+fn script_catalog_json_objects() -> Vec<String> {
+    load_script_catalog()
+        .iter()
+        .map(|spec| {
         let deps = script_dependencies(&spec.id)
             .iter()
             .map(|dep| format!("\"{}\"", json_escape(dep)))
             .collect::<Vec<_>>()
             .join(",");
-        println!(
-            "  {{\"id\":\"{}\",\"source\":\"{}\",\"description\":\"{}\",\"status\":\"{}\",\"note\":\"{}\",\"category\":\"{}\",\"backend\":\"{}\",\"dependencies\":[{}]}}{}",
+        format!(
+            "{{\"id\":\"{}\",\"kind\":\"command\",\"source\":\"{}\",\"description\":\"{}\",\"status\":\"{}\",\"note\":\"{}\",\"category\":\"{}\",\"domain\":\"{}\",\"backend\":\"{}\",\"dependencies\":[{}],\"version\":\"{}\",\"license\":\"MIT\"}}",
             json_escape(&spec.id),
             json_escape(&spec.source),
             json_escape(&spec.description),
             json_escape(&spec.status),
             json_escape(&spec.note),
             script_category(&spec.id),
+            script_category(&spec.id),
             script_backend(&spec.id),
             deps,
-            if index + 1 == specs.len() { "" } else { "," }
-        );
-    }
-    println!("]");
+            env!("CARGO_PKG_VERSION")
+        )
+    })
+    .collect()
 }
 
 fn print_script_help(id: &str) -> i32 {
@@ -605,43 +645,69 @@ fn print_script_help(id: &str) -> i32 {
 }
 
 fn command_available(command: &str) -> bool {
-    let Some(path_var) = env::var_os("PATH") else {
-        return false;
-    };
-    env::split_paths(&path_var).any(|dir| {
-        let candidate = dir.join(command);
-        candidate.is_file() || cfg!(windows) && candidate.with_extension("exe").is_file()
-    })
+    recipe::command_available(command)
 }
 
 fn run_doctor(args: &[String]) -> i32 {
     if needs_help(args) {
-        println!("Usage: biohub doctor [--strict] [--json]");
+        println!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
         return 0;
     }
     let json = args.iter().any(|arg| arg == "--json");
     let strict = args.iter().any(|arg| arg == "--strict");
-    if args.iter().any(|arg| arg != "--json" && arg != "--strict") {
-        eprintln!("Usage: biohub doctor [--strict] [--json]");
-        return 2;
+    let mut recipe_id: Option<String> = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" | "--strict" => index += 1,
+            "--recipe" => {
+                if recipe_id.is_some() || index + 1 >= args.len() {
+                    eprintln!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
+                    return 2;
+                }
+                recipe_id = Some(args[index + 1].clone());
+                index += 2;
+            }
+            _ => {
+                eprintln!("Usage: biohub doctor [--strict] [--json] [--recipe <recipe-id>]");
+                return 2;
+            }
+        }
     }
 
-    let checks = [
-        ("Rscript", "R-backed visualization and statistics commands"),
-        ("samtools", "BAM pair merge commands"),
-        ("mafft", "orthofiner-to-pal2nal"),
-        ("pal2nal.pl", "orthofiner-to-pal2nal"),
-        ("hamstr", "optional Hamstr adapter"),
-    ];
+    let checks: Vec<(String, String)> = if let Some(id) = recipe_id.as_deref() {
+        match recipe::recipe_dependencies(id) {
+            Ok(dependencies) => dependencies
+                .into_iter()
+                .map(|command| (command, format!("recipe {id}")))
+                .collect(),
+            Err(error) => {
+                eprintln!("{error}");
+                return 1;
+            }
+        }
+    } else {
+        [
+            ("Rscript", "R-backed visualization and statistics commands"),
+            ("samtools", "BAM pair merge commands"),
+            ("mafft", "orthofiner-to-pal2nal"),
+            ("pal2nal.pl", "orthofiner-to-pal2nal"),
+            ("hamstr", "optional Hamstr adapter"),
+            ("snakemake", "project-level recipe workflows"),
+        ]
+        .iter()
+        .map(|(command, purpose)| (command.to_string(), purpose.to_string()))
+        .collect()
+    };
     let mut missing = Vec::new();
-    let results: Vec<(&str, &str, bool)> = checks
+    let results: Vec<(String, String, bool)> = checks
         .iter()
         .map(|(command, purpose)| {
-            let available = command_available(command);
+            let available = recipe::dependency_available(command);
             if !available {
-                missing.push(*command);
+                missing.push(command.clone());
             }
-            (*command, *purpose, available)
+            (command.clone(), purpose.clone(), available)
         })
         .collect();
 
@@ -650,7 +716,7 @@ fn run_doctor(args: &[String]) -> i32 {
         for (index, (command, purpose, available)) in results.iter().enumerate() {
             println!(
                 "  {{\"command\":\"{}\",\"purpose\":\"{}\",\"available\":{}}}{}",
-                command,
+                json_escape(command),
                 json_escape(purpose),
                 available,
                 if index + 1 == results.len() { "" } else { "," }
@@ -672,7 +738,7 @@ fn run_doctor(args: &[String]) -> i32 {
                 "\nMissing optional or command-specific dependencies: {}",
                 missing.join(", ")
             );
-            println!("Docker image supplies Rscript, samtools, mafft, and pal2nal.pl.");
+            println!("Use matching locked BioHub environment or domain container.");
         }
     }
 
@@ -681,6 +747,86 @@ fn run_doctor(args: &[String]) -> i32 {
     } else {
         0
     }
+}
+
+fn run_catalog(args: &[String]) -> i32 {
+    if needs_help(args) {
+        println!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+        return 0;
+    }
+    let mut format = None;
+    let mut kind = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        if index + 1 >= args.len() {
+            eprintln!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+            return 2;
+        }
+        match args[index].as_str() {
+            "--format" if format.is_none() => format = Some(args[index + 1].as_str()),
+            "--kind" if kind.is_none() => kind = Some(args[index + 1].as_str()),
+            _ => {
+                eprintln!(
+                    "Usage: biohub catalog [--format table|json] [--kind all|command|recipe]"
+                );
+                return 2;
+            }
+        }
+        index += 2;
+    }
+    let format = format.unwrap_or("table");
+    let kind = kind.unwrap_or("all");
+    if !matches!(format, "table" | "json") || !matches!(kind, "all" | "command" | "recipe") {
+        eprintln!("Usage: biohub catalog [--format table|json] [--kind all|command|recipe]");
+        return 2;
+    }
+
+    if format == "json" {
+        let mut objects = Vec::new();
+        if matches!(kind, "all" | "command") {
+            objects.extend(script_catalog_json_objects());
+        }
+        if matches!(kind, "all" | "recipe") {
+            match recipe::recipe_catalog_json_objects() {
+                Ok(recipes) => objects.extend(recipes),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            }
+        }
+        println!("[");
+        for (object_index, object) in objects.iter().enumerate() {
+            println!(
+                "  {}{}",
+                object,
+                if object_index + 1 == objects.len() {
+                    ""
+                } else {
+                    ","
+                }
+            );
+        }
+        println!("]");
+        return 0;
+    }
+
+    if matches!(kind, "all" | "command") {
+        if kind == "all" {
+            println!("COMMANDS");
+        }
+        print_script_catalog();
+    }
+    if matches!(kind, "all" | "recipe") {
+        if kind == "all" {
+            println!("\nRECIPES");
+        }
+        if let Err(error) = recipe::print_recipe_catalog_table() {
+            eprintln!("{error}");
+            return 1;
+        }
+    }
+    0
 }
 
 fn get_opt(args: &[String], keys: &[&str]) -> Option<String> {
@@ -834,8 +980,9 @@ fn run_reciprocal(blast: &str, reverse: &str, output: Option<&str>) -> Result<i3
     let b = read_pairs(reverse)?;
     let mut out = open_writer(output)?;
 
-    for (q, t) in a {
-        if b.get(&t).is_some_and(|v| v == &q) {
+    for q in sorted_string_keys(&a) {
+        let t = &a[q];
+        if b.get(t).is_some_and(|v| v == q) {
             writeln!(out, "{q}\t{t}")?;
         }
     }
@@ -1595,6 +1742,201 @@ fn run_filter_gtf_ctg(input: &str, id_list: &str, output: &str) -> Result<i32> {
     Ok(0)
 }
 
+#[derive(Debug)]
+enum LengthFilteredGffEntry {
+    Raw(String),
+    Record {
+        raw: String,
+        id: Option<String>,
+        parents: Vec<String>,
+        direct_invalid: bool,
+    },
+}
+
+fn run_filter_gff_by_fasta_lengths(
+    gff: &str,
+    lengths_file: &str,
+    output: Option<&str>,
+) -> Result<i32> {
+    let mut lengths: HashMap<String, usize> = HashMap::new();
+    let mut length_reader = open_reader(lengths_file)?;
+    let mut line = String::new();
+    let mut length_line = 0usize;
+    while length_reader.read_line(&mut line)? > 0 {
+        length_line += 1;
+        let raw = line.trim_end_matches(['\n', '\r']).trim().to_string();
+        line.clear();
+        if raw.is_empty() || raw.starts_with('#') {
+            continue;
+        }
+        let columns: Vec<&str> = raw.split_whitespace().collect();
+        if columns.len() < 2 {
+            return Err(format!(
+                "invalid lengths row {length_line}: expected sequence ID and length"
+            )
+            .into());
+        }
+        let length = columns[1].parse::<usize>().map_err(|_| {
+            format!(
+                "invalid sequence length at row {length_line}: {}",
+                columns[1]
+            )
+        })?;
+        if length == 0 {
+            return Err(format!("sequence length must be positive at row {length_line}").into());
+        }
+        if let Some(previous) = lengths.insert(columns[0].to_string(), length) {
+            if previous != length {
+                return Err(format!(
+                    "conflicting lengths for sequence {}: {previous} and {length}",
+                    columns[0]
+                )
+                .into());
+            }
+        }
+    }
+    if lengths.is_empty() {
+        return Err("lengths file contains no sequence lengths".into());
+    }
+
+    let mut entries = Vec::new();
+    let mut invalid_nodes: HashSet<String> = HashSet::new();
+    let mut relationships: Vec<(String, Vec<String>)> = Vec::new();
+    let mut missing_contigs: HashSet<String> = HashSet::new();
+    let mut gff_reader = open_reader(gff)?;
+    let mut gff_line = 0usize;
+    while gff_reader.read_line(&mut line)? > 0 {
+        gff_line += 1;
+        let raw = line.trim_end_matches(['\n', '\r']).to_string();
+        line.clear();
+        if raw.is_empty() || raw.starts_with('#') {
+            entries.push(LengthFilteredGffEntry::Raw(raw));
+            continue;
+        }
+        let columns: Vec<&str> = raw.split('\t').collect();
+        if columns.len() != 9 {
+            entries.push(LengthFilteredGffEntry::Raw(raw));
+            continue;
+        }
+        let start = columns[3]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid GFF start at row {gff_line}: {}", columns[3]))?;
+        let end = columns[4]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid GFF end at row {gff_line}: {}", columns[4]))?;
+        if start == 0 || end < start {
+            return Err(format!(
+                "invalid GFF interval at row {gff_line}: {}-{}",
+                columns[3], columns[4]
+            )
+            .into());
+        }
+
+        let direct_invalid = match lengths.get(columns[0]) {
+            Some(length) => end > *length,
+            None => {
+                missing_contigs.insert(columns[0].to_string());
+                true
+            }
+        };
+        let attributes = parse_gff_attrs(columns[8]);
+        let id = attributes
+            .get("ID")
+            .filter(|value| !value.is_empty())
+            .cloned();
+        let parents: Vec<String> = attributes
+            .get("Parent")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(id) = id.as_ref() {
+            relationships.push((id.clone(), parents.clone()));
+        }
+        if direct_invalid {
+            match columns[2].to_ascii_lowercase().as_str() {
+                "gene" | "mrna" | "transcript" => {
+                    if let Some(id) = id.as_ref() {
+                        invalid_nodes.insert(id.clone());
+                    } else {
+                        invalid_nodes.extend(parents.iter().cloned());
+                    }
+                }
+                _ if !parents.is_empty() => invalid_nodes.extend(parents.iter().cloned()),
+                _ => {
+                    if let Some(id) = id.as_ref() {
+                        invalid_nodes.insert(id.clone());
+                    }
+                }
+            }
+        }
+        entries.push(LengthFilteredGffEntry::Record {
+            raw,
+            id,
+            parents,
+            direct_invalid,
+        });
+    }
+
+    loop {
+        let mut changed = false;
+        for (id, parents) in &relationships {
+            if !invalid_nodes.contains(id)
+                && parents.iter().any(|parent| invalid_nodes.contains(parent))
+            {
+                invalid_nodes.insert(id.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut writer = open_writer(output)?;
+    let mut printed_records = 0usize;
+    let mut skipped_records = 0usize;
+    let mut preserved_non_records = 0usize;
+    for entry in entries {
+        match entry {
+            LengthFilteredGffEntry::Raw(raw) => {
+                writeln!(writer, "{raw}")?;
+                preserved_non_records += 1;
+            }
+            LengthFilteredGffEntry::Record {
+                raw,
+                id,
+                parents,
+                direct_invalid,
+            } => {
+                let invalid = direct_invalid
+                    || id
+                        .as_ref()
+                        .is_some_and(|value| invalid_nodes.contains(value))
+                    || parents.iter().any(|value| invalid_nodes.contains(value));
+                if invalid {
+                    skipped_records += 1;
+                } else {
+                    writeln!(writer, "{raw}")?;
+                    printed_records += 1;
+                }
+            }
+        }
+    }
+    writer.flush()?;
+    eprintln!(
+        "printed_records={printed_records} skipped_records={skipped_records} preserved_non_records={preserved_non_records} invalid_models={} missing_contigs={}",
+        invalid_nodes.len(),
+        missing_contigs.len()
+    );
+    Ok(0)
+}
+
 fn run_merge_two_txt(input: &str, output: Option<&str>) -> Result<i32> {
     let mut best_map: HashMap<String, Vec<String>> = HashMap::new();
     let mut reader = open_reader(input)?;
@@ -1623,8 +1965,8 @@ fn run_merge_two_txt(input: &str, output: Option<&str>) -> Result<i32> {
     }
 
     let mut out = open_writer(output)?;
-    for fields in best_map.values() {
-        writeln!(out, "{}", fields.join("\t"))?;
+    for key in sorted_string_keys(&best_map) {
+        writeln!(out, "{}", best_map[key].join("\t"))?;
     }
     Ok(0)
 }
@@ -1663,9 +2005,10 @@ fn run_compare_two_blast(primary: &str, reverse: &str, output: Option<&str>) -> 
     }
 
     let mut out = open_writer(output)?;
-    for (query, target) in primary_map {
-        if let Some(rev_target) = reverse_map.get(&target) {
-            if rev_target == &query {
+    for query in sorted_string_keys(&primary_map) {
+        let target = &primary_map[query];
+        if let Some(rev_target) = reverse_map.get(target) {
+            if rev_target == query {
                 writeln!(out, "{}\t{}", query, target)?;
             }
         }
@@ -1702,8 +2045,8 @@ fn run_get_best_idy(input: &str, output: Option<&str>) -> Result<i32> {
     }
 
     let mut out = open_writer(output)?;
-    for (query, idy) in best_map {
-        writeln!(out, "{query}\t{idy}")?;
+    for query in sorted_string_keys(&best_map) {
+        writeln!(out, "{query}\t{}", best_map[query])?;
     }
     Ok(0)
 }
@@ -1740,8 +2083,8 @@ fn run_get_best_hit_based_on_idy(input: &str, output: Option<&str>) -> Result<i3
     }
 
     let mut out = open_writer(output)?;
-    for line in best_line.values() {
-        writeln!(out, "{line}")?;
+    for query in sorted_string_keys(&best_line) {
+        writeln!(out, "{}", best_line[query])?;
     }
     Ok(0)
 }
@@ -1778,28 +2121,36 @@ fn run_get_best_hit_genes(input: &str, output: Option<&str>) -> Result<i32> {
             (gene_a.to_string(), gene_b.to_string()),
             (gene_b.to_string(), gene_a.to_string()),
         ] {
-            let state = e_dict.entry(query.clone()).or_insert(BestHitState {
-                best_score: f64::INFINITY,
-                best_raw: "100".to_string(),
-                best_target: "Noop".to_string(),
-                second_score: 100.0,
-                second_target: "Noop".to_string(),
-            });
-            if evalue < state.best_score {
-                state.second_score = state.best_score;
-                state.second_target = state.best_target.clone();
-                state.best_score = evalue;
-                state.best_raw = cols[10].to_string();
-                state.best_target = target.clone();
-            } else if evalue < state.second_score {
-                state.second_score = evalue;
-                state.second_target = target.clone();
+            match e_dict.entry(query.clone()) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(BestHitState {
+                        best_score: evalue,
+                        best_raw: cols[10].to_string(),
+                        best_target: target.clone(),
+                        second_score: 100.0,
+                        second_target: "Noop".to_string(),
+                    });
+                }
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let state = entry.get_mut();
+                    if evalue < state.best_score {
+                        state.second_score = state.best_score;
+                        state.second_target = state.best_target.clone();
+                        state.best_score = evalue;
+                        state.best_raw = cols[10].to_string();
+                        state.best_target = target.clone();
+                    } else if evalue < state.second_score {
+                        state.second_score = evalue;
+                        state.second_target = target.clone();
+                    }
+                }
             }
         }
     }
 
     let mut out = open_writer(output)?;
-    for (gene, state) in &e_dict {
+    for gene in sorted_string_keys(&e_dict) {
+        let state = &e_dict[gene];
         if let Some(best_target_state) = e_dict.get(&state.best_target) {
             if best_target_state.best_target == *gene {
                 writeln!(
@@ -2022,8 +2373,8 @@ fn run_merge_gos(swissprot: &str, nr: &str, trembl: &str, output: Option<&str>) 
     load_go(trembl, &mut go_map);
 
     let mut out = open_writer(output)?;
-    for (gene, gos) in go_map {
-        for go_name in gos {
+    for gene in sorted_string_keys(&go_map) {
+        for go_name in &go_map[gene] {
             writeln!(out, "{gene}\t{go_name}")?;
         }
     }
@@ -2126,10 +2477,10 @@ fn run_genome_gc(input: &str, output: Option<&str>) -> Result<i32> {
     while reader.read_line(&mut row)? > 0 {
         let raw = row.trim_end_matches(['\n', '\r']).to_string();
         row.clear();
+        if raw.starts_with('>') {
+            continue;
+        }
         for ch in raw.chars() {
-            if ch == '>' {
-                continue;
-            }
             match ch {
                 'G' | 'g' | 'C' | 'c' => {
                     gc_count += 1;
@@ -2207,8 +2558,8 @@ fn run_get_the_longest_seq(input: &str, output: Option<&str>) -> Result<i32> {
         }
     }
 
-    for (gene, trans) in selected {
-        writeln!(out, "{trans}\t{gene}")?;
+    for gene in sorted_string_keys(&selected) {
+        writeln!(out, "{}\t{gene}", selected[gene])?;
     }
     Ok(0)
 }
@@ -2229,12 +2580,12 @@ fn run_extract_longest_pep_from_ensembl_download(input: &str, output: Option<&st
         }
         if let Some(rest) = raw.strip_prefix('>') {
             if !current_name.is_empty() {
-                let key = if records.contains_key(rest) {
-                    let v = format!("{rest}-{dup_count}");
+                let key = if records.contains_key(&current_name) {
+                    let v = format!("{current_name}-{dup_count}");
                     dup_count += 1;
                     v
                 } else {
-                    rest.to_string()
+                    current_name.clone()
                 };
                 records.insert(key, vec![current_seq.clone()]);
             }
@@ -2269,9 +2620,9 @@ fn run_extract_longest_pep_from_ensembl_download(input: &str, output: Option<&st
     }
 
     let mut out = open_writer(output)?;
-    for (name, (seq, _)) in longest {
+    for name in sorted_string_keys(&longest) {
         writeln!(out, ">{name}")?;
-        writeln!(out, "{seq}")?;
+        writeln!(out, "{}", longest[name].0)?;
     }
     Ok(0)
 }
@@ -2485,6 +2836,7 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
     let mut gene_id = 1usize;
     let mut mrna_id = 1usize;
     let mut exon_id = 1usize;
+    let mut current_gene = String::new();
     let mut current_mrna = String::new();
 
     while reader.read_line(&mut line)? > 0 {
@@ -2504,6 +2856,7 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
                 let g_id = format!("Plants{}gene{gene_id:05}", fields[0].to_uppercase());
                 let g_name = format!("Plant{gene_id:05}");
                 writeln!(out, "{}\tID={g_id};Name={g_name}", fields[..8].join("\t"))?;
+                current_gene = g_id;
                 current_mrna.clear();
                 gene_id += 1;
                 mrna_id = 1;
@@ -2519,9 +2872,9 @@ fn run_convert_gemoma_gff3(input_gff: &str, output: Option<&str>) -> Result<i32>
                 let m_name = format!("Plant{:05}.{}", gene_id - 1, mrna_id);
                 writeln!(
                     out,
-                    "{}\tID={m_id};Parent=Plant{:05};Name={m_name}",
+                    "{}\tID={m_id};Parent={};Name={m_name}",
                     fields[..8].join("\t"),
-                    gene_id - 1
+                    current_gene
                 )?;
                 current_mrna = m_id;
                 mrna_id += 1;
@@ -2989,7 +3342,7 @@ fn run_filter_gemoma_as2(input_gff: &str, output: Option<&str>) -> Result<i32> {
         if feature == "CDS" && cols.len() > 4 {
             let s = cols[3].parse::<i64>().unwrap_or(0);
             let e = cols[4].parse::<i64>().unwrap_or(0);
-            current_len += (e - s).abs();
+            current_len += (e - s).abs() + 1;
         }
         current_lines.push(raw);
     }
@@ -3061,9 +3414,10 @@ fn run_get_best_hit_by_score(
     }
 
     let mut out = open_writer(output)?;
-    for (q, (_score, t)) in qbest {
-        if let Some((_r, rev_q)) = rbest.get(&t) {
-            if rev_q == &q {
+    for q in sorted_string_keys(&qbest) {
+        let t = &qbest[q].1;
+        if let Some((_r, rev_q)) = rbest.get(t) {
+            if rev_q == q {
                 writeln!(out, "{q}\t{t}")?;
             }
         }
@@ -3135,9 +3489,10 @@ fn run_get_best_hit_by_score_one_file(
         .unwrap_or(&format!("{out_prefix}.idy.txt"))
         .to_string();
     let mut out = BufWriter::new(File::create(out_file)?);
-    for (q, (_s, t, idy)) in qbest {
-        if let Some((_score, rev_q)) = rbest.get(&t) {
-            if rev_q == &q {
+    for q in sorted_string_keys(&qbest) {
+        let (_score, t, idy) = &qbest[q];
+        if let Some((_score, rev_q)) = rbest.get(t) {
+            if rev_q == q {
                 writeln!(out, "{q}\t{t}\t{idy}")?;
             }
         }
@@ -3151,12 +3506,15 @@ fn run_get_best_hit_from_blast(
     output: Option<&str>,
 ) -> Result<i32> {
     let mut all_map: HashMap<String, Vec<String>> = HashMap::new();
-    for entry in fs::read_dir(expand_path(path_dir))? {
-        let entry = entry?;
-        if !entry.path().is_file() {
+    let mut input_files: Vec<PathBuf> = fs::read_dir(expand_path(path_dir))?
+        .map(|entry| entry.map(|item| item.path()))
+        .collect::<std::result::Result<Vec<_>, io::Error>>()?;
+    input_files.sort();
+    for path in input_files {
+        if !path.is_file() {
             continue;
         }
-        let file = entry.path().to_string_lossy().to_string();
+        let file = path.to_string_lossy().to_string();
         let mut reader = open_reader(&file)?;
         let mut row = String::new();
         while reader.read_line(&mut row)? > 0 {
@@ -3202,7 +3560,8 @@ fn run_get_best_hit_from_blast(
     }
 
     let mut to_remove: HashSet<String> = HashSet::new();
-    let keys: Vec<String> = filtered.keys().cloned().collect();
+    let mut keys: Vec<String> = filtered.keys().cloned().collect();
+    keys.sort();
     for k in keys {
         if to_remove.contains(&k) {
             continue;
@@ -3220,8 +3579,8 @@ fn run_get_best_hit_from_blast(
     }
 
     let mut out = open_writer(output)?;
-    for (q, ts) in filtered {
-        writeln!(out, "{q}\t{}", ts.join("\t"))?;
+    for q in sorted_string_keys(&filtered) {
+        writeln!(out, "{q}\t{}", filtered[q].join("\t"))?;
     }
     Ok(0)
 }
@@ -3273,6 +3632,7 @@ fn run_extract_gene_family_info(
 
     let mut ex_reader = open_reader(expr_file)?;
     let _ = ex_reader.read_line(&mut expr_row)?;
+    expr_row.clear();
     while ex_reader.read_line(&mut expr_row)? > 0 {
         let raw = expr_row.trim_end_matches(['\n', '\r']).to_string();
         expr_row.clear();
@@ -3319,17 +3679,21 @@ fn run_extract_gene_family_info(
         }
     }
 
-    for (family, lines) in part {
+    for family in sorted_string_keys(&part) {
         let out_path = Path::new(out_dir).join(format!("{family}.partial.geneExpression.txt"));
         let mut out = BufWriter::new(File::create(out_path)?);
+        let mut lines = part[family].clone();
+        lines.sort();
         for l in lines {
             writeln!(out, "{l}")?;
         }
     }
 
-    for (family, lines) in full {
+    for family in sorted_string_keys(&full) {
         let out_path = Path::new(out_dir).join(format!("{family}.fullenth.geneExpression.txt"));
         let mut out = BufWriter::new(File::create(out_path)?);
+        let mut lines = full[family].clone();
+        lines.sort();
         for l in lines {
             writeln!(out, "{l}")?;
         }
@@ -3396,6 +3760,7 @@ fn run_extract_gene_family_matrix(
 
     let mut expr_reader = open_reader(expr_file)?;
     let _ = expr_reader.read_line(&mut r1)?;
+    r1.clear();
     while expr_reader.read_line(&mut r1)? > 0 {
         let raw = r1.trim_end_matches(['\n', '\r']).to_string();
         r1.clear();
@@ -3420,7 +3785,9 @@ fn run_extract_gene_family_matrix(
     }
 
     let mut out = open_writer(output.or(Some("final.matrix.txt")))?;
-    for (family, genes) in family_genes {
+    for family in sorted_string_keys(&family_genes) {
+        let mut genes = family_genes[family].clone();
+        genes.sort();
         if genes.is_empty() {
             continue;
         }
@@ -3586,6 +3953,11 @@ fn run_merge_two_end_bam_internal(
     if !status.success() {
         return Err("samtools view failed".into());
     }
+
+    out1_s.flush()?;
+    out2_s.flush()?;
+    drop(out1_s);
+    drop(out2_s);
 
     let st1 = Command::new("samtools")
         .args(["view", "-bS", r1_tmp.to_string_lossy().as_ref(), "-o", out1])
@@ -3837,8 +4209,9 @@ fn run_get_longest_transcript(input: &str, output: Option<&str>) -> Result<i32> 
     }
 
     let mut out = open_writer(output)?;
-    for (_, (header, _)) in by_gene {
-        if let Some(seq) = seq_by_header.get(&header) {
+    for gene in sorted_string_keys(&by_gene) {
+        let header = &by_gene[gene].0;
+        if let Some(seq) = seq_by_header.get(header) {
             writeln!(out, ">{header}")?;
             writeln!(out, "{seq}")?;
         }
@@ -4203,9 +4576,9 @@ fn run_get_four_degenerate_sites(pal2nal_dir: &str, out_dir: &str) -> Result<i32
             sample_site.entry(sample).or_default();
         }
 
-        for (sample, entries) in sample_records {
-            let seq = entries.as_str();
-            let acc = sample_site.get_mut(&sample).unwrap();
+        for sample in sorted_string_keys(&sample_records) {
+            let seq = sample_records[sample].as_str();
+            let acc = sample_site.get_mut(sample).unwrap();
             for pos in &all_sites {
                 if *pos < seq.len() {
                     acc.push(seq.chars().nth(*pos).unwrap_or('N'));
@@ -4217,9 +4590,9 @@ fn run_get_four_degenerate_sites(pal2nal_dir: &str, out_dir: &str) -> Result<i32
     let mut out = BufWriter::new(File::create(
         Path::new(out_dir).join("fourDegenerateSite.fasta"),
     )?);
-    for (sample, seq) in sample_site {
+    for sample in sorted_string_keys(&sample_site) {
         writeln!(out, ">{sample}")?;
-        writeln!(out, "{seq}")?;
+        writeln!(out, "{}", sample_site[sample])?;
     }
 
     let mut stat = BufWriter::new(File::create(
@@ -5037,8 +5410,8 @@ fn run_scripts(args: &[String]) -> i32 {
     };
 
     match script {
-        "dotplot" => {
-            let mut r_args = vec!["run".to_string(), "dotplot".to_string()];
+        "dotplot" | "psmc-plot" => {
+            let mut r_args = vec!["run".to_string(), script.to_string()];
             r_args.extend_from_slice(script_args);
             run_r(&r_args)
         }
@@ -5206,6 +5579,32 @@ fn run_scripts(args: &[String]) -> i32 {
                 }
             };
             run(run_filter_gtf_ctg(&input, &ids, &output))
+        }
+        "filter-gff-by-fasta" => {
+            let gff = match get_required_opt(script_args, &["-i", "--input", "--gff"], "input gff")
+            {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            };
+            let lengths = match get_required_opt(
+                script_args,
+                &["-l", "--lengths", "--fai"],
+                "FASTA index or two-column lengths file",
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return 1;
+                }
+            };
+            run(run_filter_gff_by_fasta_lengths(
+                &gff,
+                &lengths,
+                get_opt(script_args, &["-o", "--output"]).as_deref(),
+            ))
         }
         "merge-two-txt" => {
             let input =
@@ -5997,7 +6396,7 @@ fn run_scripts(args: &[String]) -> i32 {
                 get_opt(script_args, &["-o", "--output"]).as_deref(),
             ))
         }
-        "orthofiner-to-pal2nal" => {
+        "orthofinder-to-pal2nal" | "orthofiner-to-pal2nal" => {
             let prot_dir = match get_required_opt(
                 script_args,
                 &["-p", "--pathOfprot", "--path", "--input"],
@@ -6741,11 +7140,7 @@ fn main() {
         "gff" => run_gff(&args[2..]),
         "fasta" => run_fasta(&args[2..]),
         "stats" => run_stats(&args[2..]),
-        "catalog" => {
-            let mut catalog_args = vec!["catalog".to_string()];
-            catalog_args.extend_from_slice(&args[2..]);
-            run_scripts(&catalog_args)
-        }
+        "catalog" => run_catalog(&args[2..]),
         "run" => {
             let force = args[2..].iter().any(|arg| arg == "--force");
             PROTECT_OUTPUTS.store(!force, Ordering::Relaxed);
@@ -6754,6 +7149,7 @@ fn main() {
             run_scripts(&script_args)
         }
         "doctor" => run_doctor(&args[2..]),
+        "recipe" => recipe::run_recipe_cli(&args[2..]),
         "r" => run_r(&args[2..]),
         "scripts" => {
             PROTECT_OUTPUTS.store(false, Ordering::Relaxed);
@@ -6827,6 +7223,14 @@ mod tests {
     #[test]
     fn test_json_escape_handles_control_characters() {
         assert_eq!(json_escape("a\"b\\c\n"), "a\\\"b\\\\c\\n");
+    }
+
+    #[test]
+    fn test_svg_tick_formatting_limits_label_width() {
+        assert_eq!(format_svg_tick(40.0), "40.000");
+        assert_eq!(format_svg_tick(125_075.0), "125075");
+        assert_eq!(format_svg_tick(1_000_250.0), "1.000e6");
+        assert_eq!(format_svg_tick(0.000_25), "2.500e-4");
     }
 
     #[test]

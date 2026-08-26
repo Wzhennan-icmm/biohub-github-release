@@ -1,0 +1,179 @@
+from pathlib import Path
+import csv
+import re
+import sys
+
+from snakemake.utils import validate
+
+BASE = Path(workflow.basedir)
+sys.path.insert(0, str(BASE.parent / "_lib"))
+from provenance import write_input_manifest, write_readme
+
+validate(config, str(BASE / "config.schema.yaml"))
+
+MANIFEST = str(Path(config["pairs_manifest"]).expanduser().resolve())
+with open(MANIFEST, newline="", encoding="utf-8") as handle:
+    ROWS = list(csv.DictReader(handle, delimiter="\t"))
+required = {"pair_id", "reference_fasta", "query_fasta"}
+if not ROWS or not required.issubset(ROWS[0]):
+    raise ValueError(f"pairs_manifest needs {sorted(required)}")
+PAIRS = [row["pair_id"] for row in ROWS]
+if len(PAIRS) != len(set(PAIRS)) or any(not re.fullmatch(r"[A-Za-z0-9._-]+", item) for item in PAIRS):
+    raise ValueError("pair_id values must be unique safe identifiers")
+PAIR_MAP = {row["pair_id"]: row for row in ROWS}
+
+
+rule all:
+    input:
+        "results/syri_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+        "report/synteny-sv.tar.gz",
+
+
+rule validate_pair:
+    input:
+        reference=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["reference_fasta"]).expanduser().resolve()),
+        query=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["query_fasta"]).expanduser().resolve()),
+    output:
+        "results/qc/{pair_id}.tsv",
+    params:
+        script=str(BASE / "validate_pair.py"),
+        matching=str(bool(config["require_matching_sequence_ids"])).lower(),
+    shell:
+        r"""
+        python3 {params.script:q} --reference {input.reference:q} --query {input.query:q} \
+          --require-matching-ids {params.matching:q} --output {output:q}
+        """
+
+
+rule align:
+    input:
+        qc="results/qc/{pair_id}.tsv",
+        reference=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["reference_fasta"]).expanduser().resolve()),
+        query=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["query_fasta"]).expanduser().resolve()),
+    output:
+        "results/paf/{pair_id}.paf",
+    log:
+        "logs/minimap2.{pair_id}.log",
+    params:
+        executable=config["minimap2_executable"],
+        preset=config["minimap_preset"],
+        threads=int(config["threads"]),
+    shell:
+        r"""
+        {params.executable:q} -x {params.preset:q} -t {params.threads} \
+          --secondary=no --cs -c --eqx {input.reference:q} {input.query:q} \
+          > {output:q} 2> {log:q}
+        """
+
+
+rule filter_paf:
+    input:
+        "results/paf/{pair_id}.paf",
+    output:
+        "results/paf/{pair_id}.filtered.paf",
+    params:
+        script=str(BASE / "filter_paf.py"),
+        length=int(config["minimum_alignment_length"]),
+        mapq=int(config["minimum_mapq"]),
+    shell:
+        r"""
+        python3 {params.script:q} --input {input:q} --minimum-length {params.length} \
+          --minimum-mapq {params.mapq} --output {output:q}
+        """
+
+
+rule syri:
+    input:
+        raw="results/paf/{pair_id}.paf",
+        filtered="results/paf/{pair_id}.filtered.paf",
+        reference=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["reference_fasta"]).expanduser().resolve()),
+        query=lambda wildcards: str(Path(PAIR_MAP[wildcards.pair_id]["query_fasta"]).expanduser().resolve()),
+    output:
+        directory("results/syri/{pair_id}"),
+    log:
+        "logs/syri.{pair_id}.log",
+    params:
+        script=str(BASE / "run_syri.py"),
+        executable=config["syri_executable"],
+        cores=int(config["syri_cores"]),
+        filtered=bool(config["syri_use_filtered_paf"]),
+        cigar=bool(config["syri_include_cigar"]),
+        snps=bool(config["syri_include_snps"]),
+    run:
+        import subprocess
+        command = [
+            "python3", params.script,
+            "--executable", str(params.executable),
+            "--paf", input.filtered if params.filtered else input.raw,
+            "--reference", input.reference,
+            "--query", input.query,
+            "--cores", str(params.cores),
+            "--output", output[0],
+            "--log", log[0],
+        ]
+        if params.cigar:
+            command.append("--include-cigar")
+        if params.snps:
+            command.append("--include-snps")
+        subprocess.run(command, check=True)
+
+
+rule summarize:
+    input:
+        expand("results/syri/{pair_id}", pair_id=PAIRS),
+    output:
+        table="results/syri_summary.tsv",
+        validation="logs/validation.log",
+    params:
+        script=str(BASE / "summarize.py"),
+        ids=" ".join(f"--pair-id {item}" for item in PAIRS),
+    shell:
+        r"""
+        python3 {params.script:q} {params.ids} --root results/syri \
+          --output {output.table:q} --log {output.validation:q}
+        """
+
+
+rule input_manifest:
+    input:
+        MANIFEST,
+    output:
+        "inputs.manifest.tsv",
+    run:
+        items = [("pairs_manifest", input[0])]
+        for row in ROWS:
+            items.append((f"reference/{row['pair_id']}", row["reference_fasta"]))
+            items.append((f"query/{row['pair_id']}", row["query_fasta"]))
+        write_input_manifest(items, output[0])
+
+
+rule readme:
+    output:
+        "results/README.txt",
+    run:
+        write_readme(
+            output[0],
+            "synteny-sv",
+            "Pairwise whole-genome minimap2 PAF alignment followed by SyRI structural-variation classification.",
+            [
+                "Reference/query pairing and chromosome-ID compatibility are checked before alignment.",
+                "Alignment-length and MAPQ filters are explicit and both raw/filtered PAF remain available.",
+                "SyRI input mode, CIGAR output and SNP inclusion are recorded configuration choices.",
+                "Large raw alignments remain in results and summary archive contains only declared report targets.",
+            ],
+        )
+
+
+rule archive:
+    input:
+        "results/syri_summary.tsv",
+        "results/README.txt",
+        "logs/validation.log",
+        "inputs.manifest.tsv",
+    output:
+        "report/synteny-sv.tar.gz",
+    shell:
+        "tar -czf {output:q} results/syri_summary.tsv results/README.txt logs/validation.log inputs.manifest.tsv"

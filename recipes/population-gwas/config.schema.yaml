@@ -1,0 +1,35 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - genotype_kind
+  - genotype
+  - traits_manifest
+  - covariates_file
+  - covariate_columns
+  - require_complete_samples
+  - plink2_executable
+  - minor_allele_frequency
+  - maximum_variant_missingness
+  - maximum_sample_missingness
+  - hardy_weinberg_pvalue
+  - significance_threshold
+properties:
+  genotype_kind: {type: string, enum: [vcf, pfile, bfile]}
+  genotype: {type: string, minLength: 1}
+  traits_manifest: {type: string, minLength: 1}
+  covariates_file:
+    oneOf:
+      - {type: string, minLength: 1}
+      - {type: "null"}
+  covariate_columns:
+    type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  require_complete_samples: {type: boolean}
+  plink2_executable: {type: string, minLength: 1}
+  minor_allele_frequency: {type: number, minimum: 0, maximum: 0.5}
+  maximum_variant_missingness: {type: number, minimum: 0, maximum: 1}
+  maximum_sample_missingness: {type: number, minimum: 0, maximum: 1}
+  hardy_weinberg_pvalue: {type: number, exclusiveMinimum: 0, maximum: 1}
+  significance_threshold: {type: number, exclusiveMinimum: 0, maximum: 1}

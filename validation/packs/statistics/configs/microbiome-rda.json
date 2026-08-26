@@ -1,0 +1,13 @@
+{
+  "feature_table": "{fixtures}/rda-features.tsv",
+  "metadata_tsv": "{fixtures}/rda-metadata.tsv",
+  "constraints": ["ph", "moisture"],
+  "condition_covariates": ["batch"],
+  "transform": "hellinger",
+  "minimum_prevalence": 0.0,
+  "minimum_total_abundance": 0.0,
+  "drop_incomplete_samples": false,
+  "permutations": 99,
+  "random_seed": 20260825,
+  "scaling": 1
+}

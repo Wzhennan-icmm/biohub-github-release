@@ -1,0 +1,25 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required:
+  - assemblies_manifest
+  - reference_fasta
+  - expected_chromosomes
+  - minimum_contig_length
+  - telomere_motif
+  - telomere_window_bp
+  - minimum_telomere_hits
+  - minimap2_executable
+  - minimap_preset
+  - threads
+properties:
+  assemblies_manifest: {type: string, minLength: 1}
+  reference_fasta: {type: string, minLength: 1}
+  expected_chromosomes: {type: integer, minimum: 1}
+  minimum_contig_length: {type: integer, minimum: 1}
+  telomere_motif: {type: string, pattern: "^[ACGTNacgtn]+$"}
+  telomere_window_bp: {type: integer, minimum: 1}
+  minimum_telomere_hits: {type: integer, minimum: 1}
+  minimap2_executable: {type: string, minLength: 1}
+  minimap_preset: {type: string, enum: [asm5, asm10, asm20]}
+  threads: {type: integer, minimum: 1}
