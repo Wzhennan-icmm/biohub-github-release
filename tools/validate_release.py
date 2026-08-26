@@ -26,6 +26,17 @@ REVIEW_STATUSES = {"automated", "approved", "pending"}
 RELEASABLE_STATUSES = {"automated", "approved"}
 RELEASED_DECISIONS = {"integrated", "recipe", "retained"}
 GENERIC_AUTHOR_MARKERS = {"biohub contributors", "contributors", "anonymous"}
+APPROVAL_RECORD_FIELDS = (
+    "Inventory IDs",
+    "Reviewer",
+    "Reviewer affiliation",
+    "Review date",
+    "Decision",
+    "BioHub head commit",
+    "Input-manifest SHA256",
+    "Output-manifest SHA256",
+    "Data/license confirmation",
+)
 
 
 def options() -> argparse.Namespace:
@@ -62,36 +73,40 @@ def approval_record_field(text: str, label: str, evidence: Path) -> str:
 
 def validate_approval_record(evidence: Path, review: dict[str, str]) -> None:
     text = evidence.read_text(encoding="utf-8")
+    fields = {
+        label: approval_record_field(text, label, evidence)
+        for label in APPROVAL_RECORD_FIELDS
+    }
     inventory_ids = set(
         re.findall(
             r"(?<!\d)\d{3}(?!\d)",
-            approval_record_field(text, "Inventory IDs", evidence),
+            fields["Inventory IDs"],
         )
     )
     if review["inventory_id"] not in inventory_ids:
         raise ValueError(
             f"approval record {evidence} does not cover inventory {review['inventory_id']}"
         )
-    reviewer = approval_record_field(text, "Reviewer", evidence)
+    reviewer = fields["Reviewer"]
     if reviewer != review["reviewer"]:
         raise ValueError(f"approval record reviewer differs for {review['inventory_id']}")
-    affiliation = approval_record_field(text, "Reviewer affiliation", evidence)
+    affiliation = fields["Reviewer affiliation"]
     if affiliation in {"-", "unknown"}:
         raise ValueError(f"approval record affiliation missing for {review['inventory_id']}")
-    reviewed_on = approval_record_field(text, "Review date", evidence)
+    reviewed_on = fields["Review date"]
     validate_date(reviewed_on, f"approval record {review['inventory_id']}")
     if reviewed_on != review["reviewed_on"]:
         raise ValueError(f"approval record date differs for {review['inventory_id']}")
-    if approval_record_field(text, "Decision", evidence).lower() != "approved":
+    if fields["Decision"].lower() != "approved":
         raise ValueError(f"approval record decision differs for {review['inventory_id']}")
-    commit = approval_record_field(text, "BioHub head commit", evidence).strip("`")
+    commit = fields["BioHub head commit"].strip("`")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError(f"approval record commit is invalid for {review['inventory_id']}")
     for label in ("Input-manifest SHA256", "Output-manifest SHA256"):
-        digest = approval_record_field(text, label, evidence).strip("`")
+        digest = fields[label].strip("`")
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError(f"approval record {label} is invalid for {review['inventory_id']}")
-    data_license = approval_record_field(text, "Data/license confirmation", evidence)
+    data_license = fields["Data/license confirmation"]
     if data_license in {"-", "unknown"}:
         raise ValueError(f"approval record data/license confirmation missing for {review['inventory_id']}")
 

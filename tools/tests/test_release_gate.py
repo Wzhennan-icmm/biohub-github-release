@@ -47,6 +47,11 @@ class ReleaseGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "reviewer differs"):
                 validate_release.validate_approval_record(altered, review)
 
+    def test_review_template_matches_approval_contract(self) -> None:
+        template = (ROOT / "validation/review-template.md").read_text(encoding="utf-8")
+        for label in validate_release.APPROVAL_RECORD_FIELDS:
+            self.assertIn(f"- {label}:", template)
+
     def test_release_requires_final_changelog(self) -> None:
         result = self.run_gate("--release", "--tag", "v0.4.0")
         self.assertNotEqual(result.returncode, 0)
