@@ -20,6 +20,12 @@ Four public CC0-1.0 representative packs live under `validation/packs/`:
 - `visualization`: inventory IDs 045, 046, 047
 - `statistics`: inventory IDs 049, 050, 053, 072
 
+Approval status:
+
+- `annotation-coordinates`: approved by Zhennan Wang on 2026-08-26; see
+  [`records/annotation-coordinates-2026-08-26.md`](records/annotation-coordinates-2026-08-26.md)
+- `orthology-codon`, `visualization`, and `statistics`: pending
+
 Build self-contained evidence under ignored `validation/evidence/`:
 
 ```bash

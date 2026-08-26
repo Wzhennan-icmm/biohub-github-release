@@ -1,6 +1,6 @@
-# BioHub v0.4 待人工批准清单
+# BioHub v0.4 人工审核状态
 
-自动验证不能代替科研领域判断。正式 `v0.4.0` 发布前，以下14项必须由具名审核人
+自动验证不能代替科研领域判断。14 项人工审核中，3 项已批准，11 项仍待具名审核人
 使用去标识化代表数据复核，并按 `review-template.md` 保存记录。
 
 公开 CC0-1.0 合成数据、参数、参考基线和验收容差已分为四个验证包：
@@ -20,7 +20,15 @@ PR CI 同时保留 30 天的四个独立 artifact：
 再查看 `review.md`、`comparisons.tsv`、`versions.tsv`；可视化包另看
 `gallery.html`。
 
-## GFF 与坐标转换
+## 审核包状态
+
+- `annotation-coordinates`：已批准；Zhennan Wang；2026-08-26；记录见
+  [`records/annotation-coordinates-2026-08-26.md`](records/annotation-coordinates-2026-08-26.md)
+- `orthology-codon`：待批准
+- `visualization`：待批准
+- `statistics`：待批准
+
+## GFF 与坐标转换（已批准）
 
 - `014 convert-gemoma-gff3`：用 GFF3 validator 检查 ID/Parent、feature 类型、phase 和层级。
 - `015 convert-gene-annotation-contigs2chr-PASA`：复核正反链首尾坐标、1-based 闭区间和未映射记录。
@@ -57,6 +65,6 @@ PR CI 同时保留 30 天的四个独立 artifact：
 5. 同一提交移除迁移矩阵对应 `pending` 标记。
 6. 运行 `python3 tools/validate_release.py --release --tag v0.4.0`；必须通过。
 
-建议逐包批准口令：`批准 annotation-coordinates`、`批准 orthology-codon`、
-`批准 visualization`、`批准 statistics`。每个口令只覆盖对应 inventory IDs；
-未明确批准的包继续保持 `pending`。
+剩余逐包批准口令：`批准 orthology-codon`、`批准 visualization`、
+`批准 statistics`。每个口令只覆盖对应 inventory IDs；未明确批准的包继续保持
+`pending`。

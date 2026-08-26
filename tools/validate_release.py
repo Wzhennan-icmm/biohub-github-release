@@ -48,6 +48,54 @@ def validate_date(value: str, label: str) -> None:
         raise ValueError(f"invalid ISO date for {label}: {value}") from error
 
 
+def approval_record_field(text: str, label: str, evidence: Path) -> str:
+    prefix = f"- {label}:"
+    values = [
+        line.removeprefix(prefix).strip()
+        for line in text.splitlines()
+        if line.startswith(prefix)
+    ]
+    if len(values) != 1 or not values[0]:
+        raise ValueError(f"approval record {evidence} needs exactly one non-empty {label} field")
+    return values[0]
+
+
+def validate_approval_record(evidence: Path, review: dict[str, str]) -> None:
+    text = evidence.read_text(encoding="utf-8")
+    inventory_ids = set(
+        re.findall(
+            r"(?<!\d)\d{3}(?!\d)",
+            approval_record_field(text, "Inventory IDs", evidence),
+        )
+    )
+    if review["inventory_id"] not in inventory_ids:
+        raise ValueError(
+            f"approval record {evidence} does not cover inventory {review['inventory_id']}"
+        )
+    reviewer = approval_record_field(text, "Reviewer", evidence)
+    if reviewer != review["reviewer"]:
+        raise ValueError(f"approval record reviewer differs for {review['inventory_id']}")
+    affiliation = approval_record_field(text, "Reviewer affiliation", evidence)
+    if affiliation in {"-", "unknown"}:
+        raise ValueError(f"approval record affiliation missing for {review['inventory_id']}")
+    reviewed_on = approval_record_field(text, "Review date", evidence)
+    validate_date(reviewed_on, f"approval record {review['inventory_id']}")
+    if reviewed_on != review["reviewed_on"]:
+        raise ValueError(f"approval record date differs for {review['inventory_id']}")
+    if approval_record_field(text, "Decision", evidence).lower() != "approved":
+        raise ValueError(f"approval record decision differs for {review['inventory_id']}")
+    commit = approval_record_field(text, "BioHub head commit", evidence).strip("`")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError(f"approval record commit is invalid for {review['inventory_id']}")
+    for label in ("Input-manifest SHA256", "Output-manifest SHA256"):
+        digest = approval_record_field(text, label, evidence).strip("`")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError(f"approval record {label} is invalid for {review['inventory_id']}")
+    data_license = approval_record_field(text, "Data/license confirmation", evidence)
+    if data_license in {"-", "unknown"}:
+        raise ValueError(f"approval record data/license confirmation missing for {review['inventory_id']}")
+
+
 def package_version(root: Path) -> str:
     cargo = (root / "biohub-rs/Cargo.toml").read_text(encoding="utf-8")
     match = re.search(r'^version = "([^"]+)"$', cargo, flags=re.MULTILINE)
@@ -180,7 +228,8 @@ def validate_reviews(root: Path, release: bool) -> tuple[int, list[str]]:
         evidence = Path(review["evidence"])
         if evidence.is_absolute() or not review["evidence"]:
             raise ValueError(f"evidence path must be relative for {inventory_id}")
-        if not (root / evidence).is_file():
+        evidence_path = root / evidence
+        if not evidence_path.is_file():
             raise ValueError(f"evidence file missing for {inventory_id}: {evidence}")
 
         matrix_is_pending = "pending" in migration["verification"]
@@ -197,6 +246,8 @@ def validate_reviews(root: Path, release: bool) -> tuple[int, list[str]]:
         if review["status"] == "approved" and review["reviewer"] in {"", "-", "ci"}:
             raise ValueError(f"approved review needs named human reviewer: {inventory_id}")
         validate_date(review["reviewed_on"], inventory_id)
+        if review["status"] == "approved":
+            validate_approval_record(evidence_path, review)
 
     if release:
         matrix_pending = [

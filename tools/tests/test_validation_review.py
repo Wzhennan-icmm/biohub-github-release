@@ -16,14 +16,15 @@ import validation_review  # noqa: E402
 
 
 class ValidationReviewTests(unittest.TestCase):
-    def test_packs_cover_every_pending_review_once(self) -> None:
+    def test_packs_cover_every_human_review_once(self) -> None:
         with (ROOT / "validation/reviews.tsv").open(
             encoding="utf-8", newline=""
         ) as handle:
-            pending = {
+            human_reviews = {
                 row["inventory_id"]
                 for row in csv.DictReader(handle, delimiter="\t")
-                if row["status"] == "pending"
+                if row["review_class"] in {"domain", "recipe", "visual"}
+                and row["status"] in {"pending", "approved"}
             }
         covered: list[str] = []
         for pack_id in validation_review.PACK_IDS:
@@ -33,7 +34,7 @@ class ValidationReviewTests(unittest.TestCase):
             self.assertTrue(pack["acceptance"])
             self.assertTrue(pack["manual_checks"])
         self.assertEqual(len(covered), len(set(covered)))
-        self.assertEqual(set(covered), pending)
+        self.assertEqual(set(covered), human_reviews)
 
     def test_reviewed_recipe_packs_remain_experimental(self) -> None:
         statuses = {}
@@ -60,7 +61,7 @@ class ValidationReviewTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("invalid choice", result.stderr)
 
-    def test_summary_is_machine_readable_and_stays_pending(self) -> None:
+    def test_summary_is_machine_readable_and_reflects_approval(self) -> None:
         result = subprocess.run(
             [
                 sys.executable,
@@ -77,7 +78,12 @@ class ValidationReviewTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)
         self.assertEqual([row["pack_id"] for row in rows], list(validation_review.PACK_IDS))
-        self.assertEqual({row["review_status"] for row in rows}, {"pending"})
+        statuses = {row["pack_id"]: row["review_status"] for row in rows}
+        self.assertEqual(statuses["annotation-coordinates"], "approved")
+        self.assertEqual(
+            {statuses[pack] for pack in ("orthology-codon", "visualization", "statistics")},
+            {"pending"},
+        )
 
     def test_numeric_tolerance_is_max_not_sum(self) -> None:
         self.assertTrue(validation_review.numeric_close(100.00009, 100.0, 1e-8, 1e-6))

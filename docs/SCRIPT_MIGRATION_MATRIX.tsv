@@ -12,9 +12,9 @@ inventory_id	source_artifact	language	decision	target	verification	note
 011	python-archive/run_compare_busco_results.py	python	integrated	command:compare-busco-results	golden-regression;publication-golden	Species-pair comparison
 012	python-archive/run_compare_two_blastFile.py	python	integrated	command:compare-two-blast	golden-regression;publication-golden	Reciprocal pair filtering
 013	python-archive/run_convert_3line2one_for_SV_depth.py	python	integrated	command:convert-3line2one	golden-regression;publication-golden	Three-row depth conversion
-014	python-archive/run_convert_GeMoMa_gff_to_gff3.py	python	integrated	command:convert-gemoma-gff3	catalog;domain-review-pending	Generated GFF3 semantics need domain golden
-015	python-archive/run_convert_gene_annotation_contigs2Chr_PASA.py	python	integrated	command:convert-gene-annotation-contigs2chr-PASA	catalog;domain-review-pending	Coordinate edge cases documented
-016	python-archive/run_convert_gene_annotation_scaffold2chr_NextGenomicsVersion.py	python	integrated	command:convert-gene-annotation-scaffold2chr-nextgenomics	catalog;domain-review-pending	Split-scaffold recovery retained
+014	python-archive/run_convert_GeMoMa_gff_to_gff3.py	python	integrated	command:convert-gemoma-gff3	catalog;domain-review-approved	GFF3 semantics approved in public CC0 validation pack on 2026-08-26
+015	python-archive/run_convert_gene_annotation_contigs2Chr_PASA.py	python	integrated	command:convert-gene-annotation-contigs2chr-PASA	catalog;domain-review-approved	Coordinate edge cases approved in public CC0 validation pack on 2026-08-26
+016	python-archive/run_convert_gene_annotation_scaffold2chr_NextGenomicsVersion.py	python	integrated	command:convert-gene-annotation-scaffold2chr-nextgenomics	catalog;domain-review-approved	Split-scaffold recovery approved in public CC0 validation pack on 2026-08-26
 017	python-archive/run_extract_gene_family_info.py	python	integrated	command:extract-gene-family-info	golden-regression;publication-golden	Family expression split
 018	python-archive/run_extract_gene_family_matrix.py	python	integrated	command:extract-gene-family-matrix	golden-regression;publication-golden	Coverage-based matrix
 019	python-archive/run_extract_longest_pep_from_ensembl_download.py	python	integrated	command:extract-longest-pep	golden-regression;publication-golden	Historical header rule explicit
